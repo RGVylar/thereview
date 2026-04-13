@@ -38,7 +38,7 @@ def login(body: UserLogin, db: DBSession = Depends(get_db)):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials"
         )
-    token = create_access_token({"sub": user.id})
+    token = create_access_token({"sub": str(user.id)})
     return Token(access_token=token)
 
 
