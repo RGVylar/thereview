@@ -187,11 +187,20 @@
 		return [...found];
 	}
 
-	/** Only accept real tiktok.com share URLs — NOT internal tiktokv.com CDN links */
+	/** Accept TikTok share URLs from data exports.
+	 *  tiktokv.com/share/video/... is used in official exports, so we allow it. */
 	function isTikTokShareUrl(url) {
 		try {
-			const h = new URL(url).hostname.replace('www.', '');
-			return h === 'tiktok.com' || h === 'vm.tiktok.com' || h === 'vt.tiktok.com';
+			const parsed = new URL(url);
+			const h = parsed.hostname.replace('www.', '');
+			const isTikTokHost =
+				h === 'tiktok.com' ||
+				h === 'vm.tiktok.com' ||
+				h === 'vt.tiktok.com' ||
+				h === 'tiktokv.com';
+			// tiktokv.com CDN serves raw media at /obj/ or /tos-* — skip those
+			if (h === 'tiktokv.com' && !parsed.pathname.startsWith('/share/')) return false;
+			return isTikTokHost;
 		} catch {
 			return false;
 		}
