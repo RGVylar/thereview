@@ -15,7 +15,7 @@
 	let addError = $state('');
 	let adding = $state(false);
 	let pendingInvites = $state(0);
-	let inviteInterval = $state(null);
+	let inviteInterval = null;
  
 async function addMeme(event) {
 	event.preventDefault();
@@ -65,6 +65,7 @@ async function addMeme(event) {
 		if (!authVal?.token) {
 			pendingInvites = 0;
 			if (inviteInterval) clearInterval(inviteInterval);
+			inviteInterval = null;
 			return;
 		}
 		refreshInviteCount();
