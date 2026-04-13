@@ -37,14 +37,39 @@ def create_session(
             status_code=400, detail="No pending memes for selected users"
         )
 
-    # Shuffle
-    random.shuffle(memes)
+    # Order memes according to mix_mode
+    mix_mode = body.mix_mode or "shuffle"
+    if mix_mode == "batched":
+        # Group memes by user, keep each group shuffled, then concatenate
+        from collections import defaultdict
+        by_user = defaultdict(list)
+        for m in memes:
+            by_user[m.user_id].append(m)
+        for uid_memes in by_user.values():
+            random.shuffle(uid_memes)
+        ordered = []
+        for uid in user_ids:
+            ordered.extend(by_user.get(uid, []))
+        memes = ordered
+    else:
+        random.shuffle(memes)
+
+    # Apply meme limit
+    if body.meme_limit and body.meme_limit > 0:
+        memes = memes[: body.meme_limit]
+
+    if not memes:
+        raise HTTPException(
+            status_code=400, detail="No pending memes for selected users"
+        )
 
     # Create session
     session = Session(
         name=body.name,
         created_by=current_user.id,
         status=SessionStatus.PENDING,
+        meme_limit=body.meme_limit,
+        mix_mode=mix_mode,
     )
     db.add(session)
     db.flush()
@@ -116,6 +141,9 @@ def get_session(
         status=session.status.value,
         created_by=session.created_by,
         created_at=session.created_at,
+        started_at=session.started_at,
+        meme_limit=session.meme_limit,
+        mix_mode=session.mix_mode,
         participants=[_user_from_session_user(p) for p in session.participants],
         session_memes=sorted(session.session_memes, key=lambda sm: sm.position),
     )
@@ -146,6 +174,7 @@ def start_session(
     )
 
     session.status = SessionStatus.ACTIVE
+    session.started_at = now
     db.commit()
 
     return get_session(session_id, db, current_user)
@@ -169,6 +198,22 @@ def finish_session(
     return get_session(session_id, db, current_user)
 
 
+@router.delete("/{session_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_session(
+    session_id: int,
+    db: DBSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    session = db.query(Session).filter(Session.id == session_id).first()
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if session.created_by != current_user.id:
+        raise HTTPException(status_code=403, detail="Only the creator can delete a session")
+    db.delete(session)
+    db.commit()
+    return None
+
+
 def _user_from_session_user(su: SessionUser):
     from app.schemas import UserOut
 
@@ -182,6 +227,9 @@ def _session_to_out(session: Session, meme_count: int) -> SessionOut:
         status=session.status.value,
         created_by=session.created_by,
         created_at=session.created_at,
+        started_at=session.started_at,
+        meme_limit=session.meme_limit,
+        mix_mode=session.mix_mode,
         participants=[_user_from_session_user(p) for p in session.participants],
         meme_count=meme_count,
     )

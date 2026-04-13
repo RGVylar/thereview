@@ -66,6 +66,8 @@ class DeadCheckResponse(BaseModel):
 class SessionCreate(BaseModel):
     name: str
     user_ids: list[int]
+    meme_limit: int | None = None
+    mix_mode: str = "shuffle"  # "shuffle" | "batched"
 
 
 class SessionMemeOut(BaseModel):
@@ -83,6 +85,9 @@ class SessionOut(BaseModel):
     status: str
     created_by: int
     created_at: datetime
+    started_at: datetime | None = None
+    meme_limit: int | None = None
+    mix_mode: str = "shuffle"
     participants: list[UserOut]
     meme_count: int
 
@@ -95,6 +100,9 @@ class SessionDetail(BaseModel):
     status: str
     created_by: int
     created_at: datetime
+    started_at: datetime | None = None
+    meme_limit: int | None = None
+    mix_mode: str = "shuffle"
     participants: list[UserOut]
     session_memes: list[SessionMemeOut]
 

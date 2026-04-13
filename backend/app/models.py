@@ -72,6 +72,11 @@ class Session(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+    started_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, default=None
+    )
+    meme_limit: Mapped[int | None] = mapped_column(Integer, nullable=True, default=None)
+    mix_mode: Mapped[str] = mapped_column(String(20), nullable=False, default="shuffle")
 
     creator: Mapped["User"] = relationship()
     participants: Mapped[list["SessionUser"]] = relationship(
@@ -80,7 +85,9 @@ class Session(Base):
     session_memes: Mapped[list["SessionMeme"]] = relationship(
         back_populates="session", cascade="all, delete-orphan"
     )
-    votes: Mapped[list["Vote"]] = relationship(back_populates="session")
+    votes: Mapped[list["Vote"]] = relationship(
+        back_populates="session", cascade="all, delete-orphan"
+    )
 
 
 class SessionUser(Base):

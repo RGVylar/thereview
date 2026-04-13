@@ -21,6 +21,77 @@
 	// Cache for Twitter oEmbed HTML keyed by meme_id
 	let twitterEmbeds = $state({});
 
+	// WebSocket
+	let ws = $state(null);
+	let connectedUsers = $state(0);
+	let syncMessage = $state('');
+
+	// Timer
+	let elapsed = $state('00:00');
+	let timerInterval = $state(null);
+
+	function startTimer(startedAt) {
+		if (timerInterval) clearInterval(timerInterval);
+		if (!startedAt) return;
+		const start = new Date(startedAt).getTime();
+		function tick() {
+			const diff = Math.floor((Date.now() - start) / 1000);
+			const h = Math.floor(diff / 3600);
+			const m = Math.floor((diff % 3600) / 60);
+			const s = diff % 60;
+			elapsed = h > 0
+				? `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+				: `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+		}
+		tick();
+		timerInterval = setInterval(tick, 1000);
+	}
+
+	function connectWs(sessionId, token) {
+		if (ws) ws.close();
+		const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+		const url = `${proto}://${location.host}/api/sessions/${sessionId}/ws?token=${encodeURIComponent(token)}`;
+		const socket = new WebSocket(url);
+
+		socket.onopen = () => {
+			syncMessage = '';
+		};
+
+		socket.onmessage = (event) => {
+			try {
+				const msg = JSON.parse(event.data);
+				if (msg.type === 'navigate') {
+					currentIndex = msg.index;
+				} else if (msg.type === 'vote') {
+					// Update local votes from remote
+					votes = votes.filter(
+						(v) => !(v.meme_id === msg.meme_id && v.user_id === msg.user_id)
+					);
+					votes = [...votes, {
+						id: 0,
+						user_id: msg.user_id,
+						meme_id: msg.meme_id,
+						session_id: sessionId,
+						value: msg.value,
+						created_at: new Date().toISOString()
+					}];
+				} else if (msg.type === 'finish') {
+					loadSession();
+				} else if (msg.type === 'join' || msg.type === 'leave') {
+					connectedUsers = msg.count;
+					syncMessage = `${msg.user} ${msg.type === 'join' ? 'se ha unido' : 'se ha ido'}`;
+					setTimeout(() => { syncMessage = ''; }, 3000);
+				}
+			} catch {}
+		};
+
+		socket.onclose = () => {
+			ws = null;
+		};
+
+		ws = socket;
+	}
+
 	/** Svelte action: after the HTML is injected, tell Twitter widgets to render */
 	function tweetWidget(node) {
 		const tryLoad = () => {
@@ -29,7 +100,6 @@
 			}
 		};
 		tryLoad();
-		// Retry in case widgets.js hasn't finished loading yet
 		const t = setTimeout(tryLoad, 800);
 		return { destroy() { clearTimeout(t); } };
 	}
@@ -40,6 +110,11 @@
 			return;
 		}
 		loadSession();
+
+		return () => {
+			if (ws) ws.close();
+			if (timerInterval) clearInterval(timerInterval);
+		};
 	});
 
 	async function loadSession() {
@@ -50,6 +125,12 @@
 			if (session.status === 'finished') {
 				ranking = await api(`/api/sessions/${id}/votes/ranking`, { token: authVal.token });
 				view = 'ranking';
+			}
+			if (session.status === 'active') {
+				startTimer(session.started_at);
+				if (!ws || ws.readyState !== WebSocket.OPEN) {
+					connectWs(session.id, authVal.token);
+				}
 			}
 		} catch (e) {
 			error = e.message;
@@ -85,6 +166,8 @@
 				method: 'POST',
 				token: authVal.token
 			});
+			startTimer(session.started_at);
+			connectWs(session.id, authVal.token);
 		} catch (e) {
 			error = e.message;
 		}
@@ -92,12 +175,14 @@
 
 	async function finishSession() {
 		try {
+			if (ws) ws.send(JSON.stringify({ type: 'finish' }));
 			session = await api(`/api/sessions/${session.id}/finish`, {
 				method: 'POST',
 				token: authVal.token
 			});
 			ranking = await api(`/api/sessions/${session.id}/votes/ranking`, { token: authVal.token });
 			view = 'ranking';
+			if (timerInterval) clearInterval(timerInterval);
 		} catch (e) {
 			error = e.message;
 		}
@@ -115,6 +200,10 @@
 				(v) => !(v.meme_id === memeId && v.user_id === authVal.user.id)
 			);
 			votes = [...votes, vote];
+			// Broadcast via WS
+			if (ws && ws.readyState === WebSocket.OPEN) {
+				ws.send(JSON.stringify({ type: 'vote', meme_id: memeId, value }));
+			}
 		} catch (e) {
 			error = e.message;
 		}
@@ -132,11 +221,21 @@
 	}
 
 	function prev() {
-		if (currentIndex > 0) currentIndex--;
+		if (currentIndex > 0) {
+			currentIndex--;
+			if (ws && ws.readyState === WebSocket.OPEN) {
+				ws.send(JSON.stringify({ type: 'navigate', index: currentIndex }));
+			}
+		}
 	}
 
 	function next() {
-		if (currentIndex < session.session_memes.length - 1) currentIndex++;
+		if (currentIndex < session.session_memes.length - 1) {
+			currentIndex++;
+			if (ws && ws.readyState === WebSocket.OPEN) {
+				ws.send(JSON.stringify({ type: 'navigate', index: currentIndex }));
+			}
+		}
 	}
 
 	function getMemeVoteTotal(memeId) {
@@ -154,10 +253,21 @@
 	{#if session}
 		<div class="session-header">
 			<h2 class="page-title">{session.name}</h2>
-			<div class="participants">
-				{#each session.participants as p}
-					<span class="chip">{p.display_name}</span>
-				{/each}
+			<div class="header-meta">
+				<div class="participants">
+					{#each session.participants as p}
+						<span class="chip">{p.display_name}</span>
+					{/each}
+				</div>
+				{#if session.status === 'active'}
+					<div class="sync-bar">
+						<span class="timer">⏱️ {elapsed}</span>
+						<span class="connected">🟢 {connectedUsers} online</span>
+					</div>
+				{/if}
+				{#if syncMessage}
+					<p class="sync-toast">{syncMessage}</p>
+				{/if}
 			</div>
 		</div>
 
@@ -324,11 +434,40 @@
 	.session-header {
 		margin-bottom: 1rem;
 	}
+	.header-meta {
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+		margin-top: 0.5rem;
+	}
 	.participants {
 		display: flex;
 		gap: 0.5rem;
 		flex-wrap: wrap;
-		margin-top: 0.5rem;
+	}
+	.sync-bar {
+		display: flex;
+		gap: 1rem;
+		align-items: center;
+		font-size: 0.85rem;
+	}
+	.timer {
+		font-weight: 700;
+		font-variant-numeric: tabular-nums;
+		color: var(--accent);
+	}
+	.connected {
+		color: var(--text-muted);
+	}
+	.sync-toast {
+		font-size: 0.8rem;
+		color: var(--text-muted);
+		font-style: italic;
+		animation: fadeIn 0.3s;
+	}
+	@keyframes fadeIn {
+		from { opacity: 0; }
+		to { opacity: 1; }
 	}
 	.chip {
 		background: var(--bg-input);

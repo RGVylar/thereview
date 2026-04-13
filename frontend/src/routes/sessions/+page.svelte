@@ -11,6 +11,8 @@
 	let name = $state('');
 	let users = $state([]);
 	let selectedUserIds = $state([]);
+	let memeLimit = $state('');
+	let mixMode = $state('shuffle');
 	let error = $state('');
 	let loading = $state(false);
 
@@ -54,7 +56,12 @@
 		try {
 			const session = await api('/api/sessions', {
 				method: 'POST',
-				body: { name: name.trim(), user_ids: selectedUserIds },
+				body: {
+					name: name.trim(),
+					user_ids: selectedUserIds,
+					meme_limit: memeLimit ? parseInt(memeLimit) : null,
+					mix_mode: mixMode
+				},
 				token: authVal.token
 			});
 			goto(`/sessions/${session.id}`);
@@ -68,6 +75,16 @@
 	function statusLabel(status) {
 		const map = { pending: '⏳ Pendiente', active: '▶️ Activa', finished: '✅ Terminada' };
 		return map[status] || status;
+	}
+
+	async function deleteSession(id) {
+		if (!confirm('¿Seguro que quieres borrar esta sesión?')) return;
+		try {
+			await api(`/api/sessions/${id}`, { method: 'DELETE', token: authVal.token });
+			sessions = sessions.filter((s) => s.id !== id);
+		} catch (e) {
+			error = e.message;
+		}
 	}
 </script>
 
@@ -83,6 +100,20 @@
 		<div class="card create-form">
 			<h3>Crear sesión</h3>
 			<input bind:value={name} placeholder="Nombre de la sesión (ej: Review Abril)" />
+
+			<div class="config-row">
+				<div class="config-field">
+					<label class="label" for="meme-limit">Límite de memes (vacío = todos)</label>
+					<input id="meme-limit" type="number" min="1" bind:value={memeLimit} placeholder="∞" />
+				</div>
+				<div class="config-field">
+					<label class="label">Modo de mezcla</label>
+					<div class="mode-toggle">
+						<button class="mode-btn" class:selected={mixMode === 'shuffle'} onclick={() => (mixMode = 'shuffle')}>🔀 Mezclar</button>
+						<button class="mode-btn" class:selected={mixMode === 'batched'} onclick={() => (mixMode = 'batched')}>📦 Por tandas</button>
+					</div>
+				</div>
+			</div>
 
 			<p class="label">Participantes:</p>
 			<div class="user-list">
@@ -111,17 +142,22 @@
 
 	<div class="session-list">
 		{#each sessions as s (s.id)}
-			<a href="/sessions/{s.id}" class="card session-card">
-				<div class="session-header">
-					<strong>{s.name}</strong>
-					<span class="status">{statusLabel(s.status)}</span>
-				</div>
-				<div class="session-meta">
-					<span>{s.meme_count} memes</span>
-					<span>{s.participants.map((p) => p.display_name).join(', ')}</span>
-				</div>
-				<span class="date">{new Date(s.created_at).toLocaleDateString()}</span>
-			</a>
+			<div class="session-card-wrap">
+				<a href="/sessions/{s.id}" class="card session-card">
+					<div class="session-header">
+						<strong>{s.name}</strong>
+						<span class="status">{statusLabel(s.status)}</span>
+					</div>
+					<div class="session-meta">
+						<span>{s.meme_count} memes</span>
+						<span>{s.participants.map((p) => p.display_name).join(', ')}</span>
+					</div>
+					<span class="date">{new Date(s.created_at).toLocaleDateString()}</span>
+				</a>
+				{#if s.created_by === authVal.user?.id}
+					<button class="btn-delete-session" onclick={() => deleteSession(s.id)} title="Borrar sesión">🗑️</button>
+				{/if}
+			</div>
 		{:else}
 			<p class="empty">No hay sesiones. ¡Crea una para empezar la review!</p>
 		{/each}
@@ -210,5 +246,53 @@
 		text-align: center;
 		color: var(--text-muted);
 		padding: 2rem 0;
+	}
+	.config-row {
+		display: flex;
+		gap: 1rem;
+	}
+	.config-field {
+		flex: 1;
+		display: flex;
+		flex-direction: column;
+		gap: 0.3rem;
+	}
+	.config-field input {
+		width: 100%;
+	}
+	.mode-toggle {
+		display: flex;
+		gap: 0.4rem;
+	}
+	.mode-btn {
+		flex: 1;
+		padding: 0.4rem 0.5rem;
+		border-radius: 8px;
+		font-size: 0.8rem;
+		background: var(--bg-input);
+		color: var(--text);
+		border: 2px solid transparent;
+	}
+	.mode-btn.selected {
+		border-color: var(--accent);
+		background: rgba(233, 69, 96, 0.2);
+	}
+	.session-card-wrap {
+		position: relative;
+	}
+	.btn-delete-session {
+		position: absolute;
+		top: 0.5rem;
+		right: 0.5rem;
+		background: none;
+		border: none;
+		font-size: 1rem;
+		cursor: pointer;
+		opacity: 0.5;
+		transition: opacity 0.15s;
+		z-index: 1;
+	}
+	.btn-delete-session:hover {
+		opacity: 1;
 	}
 </style>
