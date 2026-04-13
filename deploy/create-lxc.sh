@@ -3,7 +3,7 @@
 # Run this on the Proxmox host (not inside the LXC)
 # Usage (on Proxmox host):
 #   bash create-lxc.sh
-#   CT_NAME=thereview CT_ID=200 bash create-lxc.sh
+#   CT_NAME=thereview CT_ID=201 bash create-lxc.sh
 
 set -euo pipefail
 
