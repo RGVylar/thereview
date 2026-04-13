@@ -15,7 +15,8 @@
 	let addError = $state('');
 	let adding = $state(false);
  
-async function addMeme() {
+async function addMeme(event) {
+	event.preventDefault();
 	addError = '';
 	if (!newUrl || !newUrl.trim()) {
 		addError = 'Introduce una URL';
@@ -51,7 +52,7 @@ async function addMeme() {
 	<nav class="navbar">
 		<a href="/" class="brand">🍿 The Review</a>
 			<div class="nav-add">
-				<form onsubmit|preventDefault={addMeme} class="nav-add-form">
+			<form onsubmit={addMeme} class="nav-add-form">
 				<input bind:value={newUrl} placeholder="Pega la URL del meme" />
 				<button class="btn-primary" type="submit" disabled={adding}>{adding ? 'Añadiendo...' : 'Añadir'}</button>
 			</form>
