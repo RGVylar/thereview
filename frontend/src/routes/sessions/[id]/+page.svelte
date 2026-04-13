@@ -21,6 +21,19 @@
 	// Cache for Twitter oEmbed HTML keyed by meme_id
 	let twitterEmbeds = $state({});
 
+	/** Svelte action: after the HTML is injected, tell Twitter widgets to render */
+	function tweetWidget(node) {
+		const tryLoad = () => {
+			if (window.twttr?.widgets) {
+				window.twttr.widgets.load(node);
+			}
+		};
+		tryLoad();
+		// Retry in case widgets.js hasn't finished loading yet
+		const t = setTimeout(tryLoad, 800);
+		return { destroy() { clearTimeout(t); } };
+	}
+
 	$effect(() => {
 		if (!authVal?.token) {
 			goto('/login');
@@ -207,7 +220,7 @@
 						{:else if embed.type === 'twitter'}
 							{#if twitterEmbeds[sm.meme.id]}
 								<!-- eslint-disable-next-line svelte/no-at-html-tags -->
-								<div class="twitter-embed-wrap">{@html twitterEmbeds[sm.meme.id]}</div>
+								<div class="twitter-embed-wrap" use:tweetWidget>{@html twitterEmbeds[sm.meme.id]}</div>
 							{:else if twitterEmbeds[sm.meme.id] === null}
 								<div class="twitter-embed">
 									<p class="tweet-hint">No se pudo cargar el tweet.</p>
