@@ -152,6 +152,18 @@ async def session_ws(websocket: WebSocket, session_id: int, token: str = Query(.
                     {"type": "finish", "user": display_name},
                 )
 
+            elif msg_type == "ready":
+                await _broadcast(
+                    session_id,
+                    {"type": "ready", "user_id": user_id, "user": display_name},
+                )
+
+            elif msg_type == "play_sync":
+                await _broadcast(
+                    session_id,
+                    {"type": "play_sync", "user": display_name},
+                )
+
     except WebSocketDisconnect:
         pass
     finally:

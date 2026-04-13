@@ -30,6 +30,12 @@
 	let elapsed = $state('00:00');
 	let timerInterval = $state(null);
 
+	// Ready system (PENDING state)
+	let readyUserIds = $state([]);
+
+	// TikTok sync play
+	let tiktokPlaying = $state(false);
+
 	function startTimer(startedAt) {
 		if (timerInterval) clearInterval(timerInterval);
 		if (!startedAt) return;
@@ -77,6 +83,12 @@
 					}];
 				} else if (msg.type === 'finish') {
 					loadSession();
+				} else if (msg.type === 'ready') {
+					if (!readyUserIds.includes(msg.user_id)) {
+						readyUserIds = [...readyUserIds, msg.user_id];
+					}
+				} else if (msg.type === 'play_sync') {
+					tiktokPlaying = true;
 				} else if (msg.type === 'join' || msg.type === 'leave') {
 					connectedUsers = msg.count;
 					syncMessage = `${msg.user} ${msg.type === 'join' ? 'se ha unido' : 'se ha ido'}`;
@@ -126,11 +138,13 @@
 				ranking = await api(`/api/sessions/${id}/votes/ranking`, { token: authVal.token });
 				view = 'ranking';
 			}
-			if (session.status === 'active') {
-				startTimer(session.started_at);
+			if (session.status === 'pending' || session.status === 'active') {
 				if (!ws || ws.readyState !== WebSocket.OPEN) {
 					connectWs(session.id, authVal.token);
 				}
+			}
+			if (session.status === 'active') {
+				startTimer(session.started_at);
 			}
 		} catch (e) {
 			error = e.message;
@@ -166,8 +180,9 @@
 				method: 'POST',
 				token: authVal.token
 			});
+			readyUserIds = [];
 			startTimer(session.started_at);
-			connectWs(session.id, authVal.token);
+			// WS already connected from PENDING state
 		} catch (e) {
 			error = e.message;
 		}
@@ -243,6 +258,29 @@
 			.filter((v) => v.meme_id === memeId)
 			.reduce((sum, v) => sum + v.value, 0);
 	}
+
+	function handleReady() {
+		const uid = authVal.user?.id;
+		if (uid && !readyUserIds.includes(uid)) {
+			readyUserIds = [...readyUserIds, uid];
+		}
+		if (ws && ws.readyState === WebSocket.OPEN) {
+			ws.send(JSON.stringify({ type: 'ready' }));
+		}
+	}
+
+	function triggerPlaySync() {
+		tiktokPlaying = true;
+		if (ws && ws.readyState === WebSocket.OPEN) {
+			ws.send(JSON.stringify({ type: 'play_sync' }));
+		}
+	}
+
+	// Reset TikTok overlay when navigating to a new meme
+	$effect(() => {
+		const _ = currentIndex;
+		tiktokPlaying = false;
+	});
 </script>
 
 <div class="container">
@@ -275,9 +313,33 @@
 		{#if session.status === 'pending'}
 			<div class="card center-card">
 				<p>{session.session_memes.length} memes listos para la review</p>
-				<button class="btn-primary big-btn" onclick={startSession}>
-					▶️ Iniciar sesión
-				</button>
+
+				<div class="ready-list">
+					{#each session.participants as p}
+						<div class="ready-row">
+							<span class="chip">{p.display_name}</span>
+							{#if readyUserIds.includes(p.id)}
+								<span class="ready-check">✅ Listo</span>
+							{:else}
+								<span class="ready-wait">⏳ Esperando…</span>
+							{/if}
+						</div>
+					{/each}
+				</div>
+
+				{#if !readyUserIds.includes(authVal.user?.id)}
+					<button class="btn-primary big-btn" onclick={handleReady}>
+						✋ ¡Estoy listo!
+					</button>
+				{:else}
+					<p class="ready-msg">Esperando al resto…</p>
+				{/if}
+
+				{#if session.created_by === authVal.user?.id && readyUserIds.length >= session.participants.length}
+					<button class="btn-primary big-btn start-btn" onclick={startSession}>
+						▶️ ¡Todos listos! Iniciar
+					</button>
+				{/if}
 			</div>
 		{/if}
 
@@ -312,13 +374,22 @@
 								class="embed-frame"
 							></iframe>
 						{:else if embed.type === 'tiktok' && embed.embedUrl}
+						<div class="tiktok-wrapper">
 							<iframe
 								src={embed.embedUrl}
 								title="TikTok"
-								allow="autoplay"
+								allow="autoplay; encrypted-media"
 								allowfullscreen
 								class="embed-frame tiktok-frame"
 							></iframe>
+							{#if !tiktokPlaying}
+								<button class="tiktok-play-overlay" onclick={triggerPlaySync}>
+									<span class="play-icon">▶</span>
+									<span>Ver juntos</span>
+									<span class="play-hint">Pulsa para empezar a la vez</span>
+								</button>
+							{/if}
+						</div>
 						{:else if embed.type === 'instagram' && embed.embedUrl}
 							<iframe
 								src={embed.embedUrl}
@@ -675,5 +746,71 @@
 		text-align: center;
 		color: var(--text-muted);
 		padding: 2rem 0;
+	}
+
+	/* Ready system */
+	.ready-list {
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+		width: 100%;
+		max-width: 320px;
+		margin: 1rem auto;
+	}
+	.ready-row {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		padding: 0.4rem 0;
+		border-bottom: 1px solid rgba(255,255,255,0.05);
+	}
+	.ready-check {
+		color: #4caf50;
+		font-size: 0.85rem;
+		font-weight: 600;
+	}
+	.ready-wait {
+		font-size: 0.85rem;
+		color: var(--text-muted);
+	}
+	.ready-msg {
+		color: var(--text-muted);
+		font-size: 0.9rem;
+		margin-top: 0.5rem;
+	}
+	.start-btn {
+		margin-top: 0.75rem;
+	}
+
+	/* TikTok sync overlay */
+	.tiktok-wrapper {
+		position: relative;
+		width: 100%;
+	}
+	.tiktok-play-overlay {
+		position: absolute;
+		inset: 0;
+		background: rgba(0, 0, 0, 0.72);
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		gap: 0.4rem;
+		border: none;
+		cursor: pointer;
+		border-radius: 8px;
+		color: #fff;
+		transition: background 0.2s;
+	}
+	.tiktok-play-overlay:hover {
+		background: rgba(0, 0, 0, 0.5);
+	}
+	.play-icon {
+		font-size: 3rem;
+		line-height: 1;
+	}
+	.play-hint {
+		font-size: 0.75rem;
+		opacity: 0.65;
 	}
 </style>

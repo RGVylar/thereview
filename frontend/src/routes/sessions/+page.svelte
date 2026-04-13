@@ -7,6 +7,7 @@
 	auth.subscribe((v) => (authVal = v));
 
 	let sessions = $state([]);
+	let seenSessionIds = $state([]);
 	let showCreate = $state(false);
 	let name = $state('');
 	let users = $state([]);
@@ -27,6 +28,30 @@
 	async function loadSessions() {
 		try {
 			sessions = await api('/api/sessions', { token: authVal.token });
+
+			// Check for new invites (sessions created by others, pending, not yet seen)
+			let seen = [];
+			try { seen = JSON.parse(localStorage.getItem('thereview_seen_sessions') || '[]'); } catch {}
+			seenSessionIds = seen;
+
+			const newInvites = sessions.filter(
+				(s) => s.created_by !== authVal.user?.id && s.status === 'pending' && !seen.includes(s.id)
+			);
+			if (newInvites.length) {
+				if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+					newInvites.forEach((s) => {
+						new Notification('🎥 Nueva sesión', {
+							body: `Te han invitado a "${s.name}"`,
+							tag: `session-${s.id}`
+						});
+					});
+				} else if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
+					Notification.requestPermission();
+				}
+				const updated = [...new Set([...seen, ...newInvites.map((s) => s.id)])];
+				localStorage.setItem('thereview_seen_sessions', JSON.stringify(updated));
+				seenSessionIds = updated;
+			}
 		} catch (e) {
 			error = e.message;
 		}
@@ -75,6 +100,10 @@
 	function statusLabel(status) {
 		const map = { pending: '⏳ Pendiente', active: '▶️ Activa', finished: '✅ Terminada' };
 		return map[status] || status;
+	}
+
+	function isNewInvite(s) {
+		return s.created_by !== authVal.user?.id && s.status === 'pending' && !seenSessionIds.includes(s.id);
 	}
 
 	async function deleteSession(id) {
@@ -142,11 +171,14 @@
 
 	<div class="session-list">
 		{#each sessions as s (s.id)}
-			<div class="card session-card-wrap">
+			<div class="card session-card-wrap" class:new-invite={isNewInvite(s)}>
 				<a href="/sessions/{s.id}" class="session-card">
 					<div class="session-header">
 						<strong>{s.name}</strong>
-						<span class="status">{statusLabel(s.status)}</span>
+						<div class="status-group">
+							{#if isNewInvite(s)}<span class="badge-new">Nueva</span>{/if}
+							<span class="status">{statusLabel(s.status)}</span>
+						</div>
 					</div>
 					<div class="session-meta">
 						<span>{s.meme_count} memes</span>
@@ -302,5 +334,23 @@
 	.btn-delete-session:hover {
 		color: var(--accent);
 		background: rgba(233, 69, 96, 0.1);
+	}
+	.new-invite {
+		border: 1px solid var(--accent) !important;
+	}
+	.status-group {
+		display: flex;
+		align-items: center;
+		gap: 0.4rem;
+	}
+	.badge-new {
+		background: var(--accent);
+		color: #fff;
+		font-size: 0.7rem;
+		font-weight: 700;
+		padding: 0.1rem 0.5rem;
+		border-radius: 10px;
+		text-transform: uppercase;
+		letter-spacing: 0.03em;
 	}
 </style>
