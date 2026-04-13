@@ -18,6 +18,9 @@
 	let error = $state('');
 	let view = $state('presentation'); // 'presentation' | 'ranking'
 
+	// Cache for Twitter oEmbed HTML keyed by meme_id
+	let twitterEmbeds = $state({});
+
 	$effect(() => {
 		if (!authVal?.token) {
 			goto('/login');
@@ -39,6 +42,29 @@
 			error = e.message;
 		}
 	}
+
+	async function loadTwitterEmbed(memeId, url) {
+		if (twitterEmbeds[memeId]) return;
+		const embed = detectEmbed(url);
+		if (embed.type !== 'twitter' || !embed.oEmbedUrl) return;
+		try {
+			const res = await fetch(embed.oEmbedUrl);
+			if (res.ok) {
+				const data = await res.json();
+				twitterEmbeds = { ...twitterEmbeds, [memeId]: data.html };
+			}
+		} catch {
+			twitterEmbeds = { ...twitterEmbeds, [memeId]: null };
+		}
+	}
+
+	$effect(() => {
+		const sm = session?.session_memes?.[currentIndex];
+		if (sm) {
+			const embed = detectEmbed(sm.meme.url);
+			if (embed.type === 'twitter') loadTwitterEmbed(sm.meme.id, sm.meme.url);
+		}
+	});
 
 	async function startSession() {
 		try {
@@ -179,12 +205,21 @@
 								class="embed-frame instagram-frame"
 							></iframe>
 						{:else if embed.type === 'twitter'}
-							<div class="twitter-embed">
-								<p class="tweet-hint">Twitter/X no permite embeds directos.</p>
-								<a href={sm.meme.url} target="_blank" rel="noopener noreferrer" class="btn-secondary open-btn">
-									🐦 Abrir en Twitter/X
-								</a>
-							</div>
+							{#if twitterEmbeds[sm.meme.id]}
+								<!-- eslint-disable-next-line svelte/no-at-html-tags -->
+								<div class="twitter-embed-wrap">{@html twitterEmbeds[sm.meme.id]}</div>
+							{:else if twitterEmbeds[sm.meme.id] === null}
+								<div class="twitter-embed">
+									<p class="tweet-hint">No se pudo cargar el tweet.</p>
+									<a href={sm.meme.url} target="_blank" rel="noopener noreferrer" class="btn-secondary open-btn">
+										🐦 Abrir en Twitter/X
+									</a>
+								</div>
+							{:else}
+								<div class="twitter-embed">
+									<p class="tweet-hint">Cargando tweet…</p>
+								</div>
+							{/if}
 						{:else if embed.type === 'image'}
 							<img src={sm.meme.url} alt="meme" class="meme-img" />
 						{:else}
@@ -468,6 +503,11 @@
 	.instagram-frame {
 		aspect-ratio: 4/5;
 		max-height: 500px;
+	}
+	.twitter-embed-wrap {
+		width: 100%;
+		display: flex;
+		justify-content: center;
 	}
 	.twitter-embed {
 		display: flex;

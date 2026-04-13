@@ -15,7 +15,10 @@ export function detectEmbed(url) {
 			};
 		}
 		if (host === 'twitter.com' || host === 'x.com') {
-			return { type: 'twitter' };
+			return {
+				type: 'twitter',
+				oEmbedUrl: `https://publish.twitter.com/oembed?url=${encodeURIComponent(url)}&theme=dark&dnt=true&omit_script=true`,
+			};
 		}
 		if (host.includes('instagram.com')) {
 			// Instagram embed: add /embed to the post URL
