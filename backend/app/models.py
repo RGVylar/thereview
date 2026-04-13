@@ -49,6 +49,10 @@ class Meme(Base):
     session_memes: Mapped[list["SessionMeme"]] = relationship(back_populates="meme")
     votes: Mapped[list["Vote"]] = relationship(back_populates="meme")
 
+    __table_args__ = (
+        UniqueConstraint("user_id", "url", name="uq_user_meme_url"),
+    )
+
 
 class SessionStatus(str, enum.Enum):
     PENDING = "pending"

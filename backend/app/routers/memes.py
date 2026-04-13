@@ -15,6 +15,12 @@ def add_meme(
     db: DBSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    existing = db.query(Meme).filter(
+        Meme.user_id == current_user.id,
+        Meme.url == str(body.url),
+    ).first()
+    if existing:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Meme already exists")
     meme = Meme(url=str(body.url), user_id=current_user.id)
     db.add(meme)
     db.commit()

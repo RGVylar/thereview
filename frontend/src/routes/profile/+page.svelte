@@ -18,6 +18,7 @@
 	let importUrls = $state([]);     // extracted TikTok URLs
 	let importDone = $state(0);      // successfully imported count
 	let importFailed = $state(0);
+	let importSkipped = $state(0);   // already existed
 	let importError = $state('');
 	let importSources = $state({ favorites: true, likes: false });
 
@@ -251,6 +252,7 @@
 		importStep = 'importing';
 		importDone = 0;
 		importFailed = 0;
+		importSkipped = 0;
 
 		for (const url of importUrls) {
 			try {
@@ -260,8 +262,12 @@
 					token: authVal.token,
 				});
 				importDone++;
-			} catch {
-				importFailed++;
+			} catch (e) {
+				if (e?.message?.includes('already exists') || e?.message === 'Meme already exists') {
+					importSkipped++;
+				} else {
+					importFailed++;
+				}
 			}
 		}
 
@@ -275,6 +281,7 @@
 		importUrls = [];
 		importDone = 0;
 		importFailed = 0;
+		importSkipped = 0;
 		importError = '';			importSources = { favorites: true, likes: false };	}
 </script>
 
@@ -349,11 +356,11 @@
 
 			{#if importStep === 'importing'}
 				<div class="import-progress">
-					<p>Importando… {importDone + importFailed} / {importUrls.length}</p>
+					<p>Importando… {importDone + importFailed + importSkipped} / {importUrls.length}</p>
 					<div class="progress-bar-wrap">
 						<div
 							class="progress-bar-fill"
-							style="width: {((importDone + importFailed) / importUrls.length) * 100}%"
+							style="width: {((importDone + importFailed + importSkipped) / importUrls.length) * 100}%"
 						></div>
 					</div>
 				</div>
@@ -362,8 +369,11 @@
 			{#if importStep === 'done'}
 				<div class="import-result">
 					<p class="import-ok">✅ {importDone} importados correctamente</p>
+					{#if importSkipped > 0}
+						<p class="import-skip">⏭️ {importSkipped} ya existían (omitidos)</p>
+					{/if}
 					{#if importFailed > 0}
-						<p class="import-warn">⚠️ {importFailed} fallaron (puede que ya existieran)</p>
+						<p class="import-warn">⚠️ {importFailed} fallaron</p>
 					{/if}
 					<button class="btn-primary" onclick={resetImport}>Cerrar</button>
 				</div>
@@ -674,6 +684,10 @@
 	.import-ok {
 		color: #27ae60;
 		font-weight: 600;
+	}
+	.import-skip {
+		color: var(--text-muted);
+		font-size: 0.85rem;
 	}
 	.import-warn {
 		color: #f1c40f;
