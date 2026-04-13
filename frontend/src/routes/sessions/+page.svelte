@@ -142,8 +142,8 @@
 
 	<div class="session-list">
 		{#each sessions as s (s.id)}
-			<div class="session-card-wrap">
-				<a href="/sessions/{s.id}" class="card session-card">
+			<div class="card session-card-wrap">
+				<a href="/sessions/{s.id}" class="session-card">
 					<div class="session-header">
 						<strong>{s.name}</strong>
 						<span class="status">{statusLabel(s.status)}</span>
@@ -155,7 +155,9 @@
 					<span class="date">{new Date(s.created_at).toLocaleDateString()}</span>
 				</a>
 				{#if s.created_by === authVal.user?.id}
-					<button class="btn-delete-session" onclick={() => deleteSession(s.id)} title="Borrar sesión">🗑️</button>
+					<div class="card-actions">
+						<button class="btn-delete-session" onclick={() => deleteSession(s.id)}>🗑️ Borrar</button>
+					</div>
 				{/if}
 			</div>
 		{:else}
@@ -217,10 +219,10 @@
 		display: block;
 		color: var(--text);
 		padding: 1rem;
-		transition: transform 0.15s;
 	}
-	.session-card:hover {
-		transform: translateY(-2px);
+	.session-card:hover strong {
+		color: var(--accent);
+		transition: color 0.15s;
 	}
 	.session-header {
 		display: flex;
@@ -278,21 +280,27 @@
 		background: rgba(233, 69, 96, 0.2);
 	}
 	.session-card-wrap {
-		position: relative;
+		padding: 0;
+		overflow: hidden;
+	}
+	.card-actions {
+		border-top: 1px solid rgba(255, 255, 255, 0.06);
+		padding: 0.5rem 1rem;
+		display: flex;
+		justify-content: flex-end;
 	}
 	.btn-delete-session {
-		position: absolute;
-		top: 0.5rem;
-		right: 0.5rem;
 		background: none;
 		border: none;
-		font-size: 1rem;
+		font-size: 0.8rem;
+		color: var(--text-muted);
 		cursor: pointer;
-		opacity: 0.5;
-		transition: opacity 0.15s;
-		z-index: 1;
+		padding: 0.25rem 0.5rem;
+		border-radius: 6px;
+		transition: color 0.15s, background 0.15s;
 	}
 	.btn-delete-session:hover {
-		opacity: 1;
+		color: var(--accent);
+		background: rgba(233, 69, 96, 0.1);
 	}
 </style>
