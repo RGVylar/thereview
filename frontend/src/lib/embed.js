@@ -11,7 +11,7 @@ export function detectEmbed(url) {
 		if (host.includes('tiktok.com') || host === 'tiktokv.com') {
 			return {
 				type: 'tiktok',
-				embedUrl: `https://www.tiktok.com/embed/v2/${extractTikTokId(u)}?autoplay=1`,
+				embedUrl: `https://www.tiktok.com/embed/v2/${extractTikTokId(u)}?autoplay=1&mute=1`,
 			};
 		}
 		if (host === 'twitter.com' || host === 'x.com') {

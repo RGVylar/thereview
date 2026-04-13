@@ -33,8 +33,8 @@
 	// Ready system (PENDING state)
 	let readyUserIds = $state([]);
 
-	// TikTok sync play
-	let tiktokPlaying = $state(false);
+	// Synchronized reveal for media players that don't autoplay reliably
+	let mediaPlaying = $state(false);
 
 	function startTimer(startedAt) {
 		if (timerInterval) clearInterval(timerInterval);
@@ -66,7 +66,9 @@
 		socket.onmessage = (event) => {
 			try {
 				const msg = JSON.parse(event.data);
-				if (msg.type === 'navigate') {
+				if (msg.type === 'start') {
+					loadSession();
+				} else if (msg.type === 'navigate') {
 					currentIndex = msg.index;
 				} else if (msg.type === 'vote') {
 					// Update local votes from remote
@@ -88,7 +90,7 @@
 						readyUserIds = [...readyUserIds, msg.user_id];
 					}
 				} else if (msg.type === 'play_sync') {
-					tiktokPlaying = true;
+					mediaPlaying = true;
 				} else if (msg.type === 'join' || msg.type === 'leave') {
 					connectedUsers = msg.count;
 					syncMessage = `${msg.user} ${msg.type === 'join' ? 'se ha unido' : 'se ha ido'}`;
@@ -180,6 +182,9 @@
 				method: 'POST',
 				token: authVal.token
 			});
+			if (ws && ws.readyState === WebSocket.OPEN) {
+				ws.send(JSON.stringify({ type: 'start' }));
+			}
 			readyUserIds = [];
 			startTimer(session.started_at);
 			// WS already connected from PENDING state
@@ -270,16 +275,20 @@
 	}
 
 	function triggerPlaySync() {
-		tiktokPlaying = true;
+		mediaPlaying = true;
 		if (ws && ws.readyState === WebSocket.OPEN) {
 			ws.send(JSON.stringify({ type: 'play_sync' }));
 		}
 	}
 
-	// Reset TikTok overlay when navigating to a new meme
+	function isSyncMedia(embedType) {
+		return embedType === 'tiktok' || embedType === 'twitter';
+	}
+
+	// Reset synchronized overlay when navigating to a new meme
 	$effect(() => {
 		const _ = currentIndex;
-		tiktokPlaying = false;
+		mediaPlaying = false;
 	});
 </script>
 
@@ -365,7 +374,9 @@
 							<span class="meme-type">{embed.type}</span>
 							<span class="meme-author">by {session.participants.find(p => p.id === sm.meme.user_id)?.display_name || '?'}</span>
 						</div>
-					{#key sm.meme.id}						{#if embed.type === 'youtube' && embed.embedUrl}
+
+						{#key sm.meme.id}
+						{#if embed.type === 'youtube' && embed.embedUrl}
 							<iframe
 								src={embed.embedUrl}
 								title="YouTube"
@@ -374,22 +385,22 @@
 								class="embed-frame"
 							></iframe>
 						{:else if embed.type === 'tiktok' && embed.embedUrl}
-						<div class="tiktok-wrapper">
-							<iframe
-								src={embed.embedUrl}
-								title="TikTok"
-								allow="autoplay; encrypted-media"
-								allowfullscreen
-								class="embed-frame tiktok-frame"
-							></iframe>
-							{#if !tiktokPlaying}
-								<button class="tiktok-play-overlay" onclick={triggerPlaySync}>
-									<span class="play-icon">▶</span>
-									<span>Ver juntos</span>
-									<span class="play-hint">Pulsa para empezar a la vez</span>
-								</button>
-							{/if}
-						</div>
+							<div class="sync-media-wrap">
+								<iframe
+									src={embed.embedUrl}
+									title="TikTok"
+									allow="autoplay; encrypted-media"
+									allowfullscreen
+									class="embed-frame tiktok-frame"
+								></iframe>
+								{#if !mediaPlaying}
+									<button class="media-sync-overlay" onclick={triggerPlaySync}>
+										<span class="play-icon">▶</span>
+										<span>Ver juntos</span>
+										<span class="play-hint">Pulsa para mostrar a la vez</span>
+									</button>
+								{/if}
+							</div>
 						{:else if embed.type === 'instagram' && embed.embedUrl}
 							<iframe
 								src={embed.embedUrl}
@@ -398,21 +409,30 @@
 								class="embed-frame instagram-frame"
 							></iframe>
 						{:else if embed.type === 'twitter'}
-							{#if twitterEmbeds[sm.meme.id]}
-								<!-- eslint-disable-next-line svelte/no-at-html-tags -->
-								<div class="twitter-embed-wrap" use:tweetWidget>{@html twitterEmbeds[sm.meme.id]}</div>
-							{:else if twitterEmbeds[sm.meme.id] === null}
-								<div class="twitter-embed">
-									<p class="tweet-hint">No se pudo cargar el tweet.</p>
-									<a href={sm.meme.url} target="_blank" rel="noopener noreferrer" class="btn-secondary open-btn">
-										🐦 Abrir en Twitter/X
-									</a>
-								</div>
-							{:else}
-								<div class="twitter-embed">
-									<p class="tweet-hint">Cargando tweet…</p>
-								</div>
-							{/if}
+							<div class="sync-media-wrap">
+								{#if twitterEmbeds[sm.meme.id]}
+									<!-- eslint-disable-next-line svelte/no-at-html-tags -->
+									<div class="twitter-embed-wrap" use:tweetWidget>{@html twitterEmbeds[sm.meme.id]}</div>
+								{:else if twitterEmbeds[sm.meme.id] === null}
+									<div class="twitter-embed">
+										<p class="tweet-hint">No se pudo cargar el tweet.</p>
+										<a href={sm.meme.url} target="_blank" rel="noopener noreferrer" class="btn-secondary open-btn">
+											🐦 Abrir en Twitter/X
+										</a>
+									</div>
+								{:else}
+									<div class="twitter-embed">
+										<p class="tweet-hint">Cargando tweet…</p>
+									</div>
+								{/if}
+								{#if isSyncMedia(embed.type) && !mediaPlaying}
+									<button class="media-sync-overlay" onclick={triggerPlaySync}>
+										<span class="play-icon">▶</span>
+										<span>Ver juntos</span>
+										<span class="play-hint">Pulsa para mostrar a la vez</span>
+									</button>
+								{/if}
+							</div>
 						{:else if embed.type === 'image'}
 							<img src={sm.meme.url} alt="meme" class="meme-img" />
 						{:else}
@@ -420,7 +440,10 @@
 								🔗 Abrir {embed.type}
 							</a>
 						{/if}
-					{/key}
+						{/key}
+
+						<div class="voting">
+							<p class="vote-label">Tu voto:</p>
 						<div class="vote-buttons">
 							{#each [1, 2, 3, 4, 5] as val}
 								<button
@@ -433,6 +456,7 @@
 							{/each}
 						</div>
 						<p class="vote-total">Total: {getMemeVoteTotal(sm.meme.id)}</p>
+						</div>
 					</div>
 
 					<!-- Navigation -->
@@ -782,12 +806,12 @@
 		margin-top: 0.75rem;
 	}
 
-	/* TikTok sync overlay */
-	.tiktok-wrapper {
+	/* Shared sync overlay for TikTok/Twitter */
+	.sync-media-wrap {
 		position: relative;
 		width: 100%;
 	}
-	.tiktok-play-overlay {
+	.media-sync-overlay {
 		position: absolute;
 		inset: 0;
 		background: rgba(0, 0, 0, 0.72);
@@ -801,8 +825,9 @@
 		border-radius: 8px;
 		color: #fff;
 		transition: background 0.2s;
+		z-index: 2;
 	}
-	.tiktok-play-overlay:hover {
+	.media-sync-overlay:hover {
 		background: rgba(0, 0, 0, 0.5);
 	}
 	.play-icon {

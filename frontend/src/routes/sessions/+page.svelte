@@ -7,7 +7,6 @@
 	auth.subscribe((v) => (authVal = v));
 
 	let sessions = $state([]);
-	let seenSessionIds = $state([]);
 	let showCreate = $state(false);
 	let name = $state('');
 	let users = $state([]);
@@ -28,30 +27,6 @@
 	async function loadSessions() {
 		try {
 			sessions = await api('/api/sessions', { token: authVal.token });
-
-			// Check for new invites (sessions created by others, pending, not yet seen)
-			let seen = [];
-			try { seen = JSON.parse(localStorage.getItem('thereview_seen_sessions') || '[]'); } catch {}
-			seenSessionIds = seen;
-
-			const newInvites = sessions.filter(
-				(s) => s.created_by !== authVal.user?.id && s.status === 'pending' && !seen.includes(s.id)
-			);
-			if (newInvites.length) {
-				if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
-					newInvites.forEach((s) => {
-						new Notification('🎥 Nueva sesión', {
-							body: `Te han invitado a "${s.name}"`,
-							tag: `session-${s.id}`
-						});
-					});
-				} else if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
-					Notification.requestPermission();
-				}
-				const updated = [...new Set([...seen, ...newInvites.map((s) => s.id)])];
-				localStorage.setItem('thereview_seen_sessions', JSON.stringify(updated));
-				seenSessionIds = updated;
-			}
 		} catch (e) {
 			error = e.message;
 		}
@@ -103,7 +78,7 @@
 	}
 
 	function isNewInvite(s) {
-		return s.created_by !== authVal.user?.id && s.status === 'pending' && !seenSessionIds.includes(s.id);
+		return s.created_by !== authVal.user?.id && s.status === 'pending';
 	}
 
 	async function deleteSession(id) {

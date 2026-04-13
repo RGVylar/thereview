@@ -14,6 +14,8 @@
 	let newUrl = $state('');
 	let addError = $state('');
 	let adding = $state(false);
+	let pendingInvites = $state(0);
+	let inviteInterval = $state(null);
  
 async function addMeme(event) {
 	event.preventDefault();
@@ -46,6 +48,32 @@ async function addMeme(event) {
 	function isActive(path) {
 		return pageVal?.url?.pathname?.startsWith(path);
 	}
+
+	async function refreshInviteCount() {
+		if (!authVal?.token) return;
+		try {
+			const sessions = await api('/api/sessions', { token: authVal.token });
+			pendingInvites = sessions.filter(
+				(s) => s.status === 'pending' && s.created_by !== authVal.user?.id
+			).length;
+		} catch {
+			// ignore navbar badge errors
+		}
+	}
+
+	$effect(() => {
+		if (!authVal?.token) {
+			pendingInvites = 0;
+			if (inviteInterval) clearInterval(inviteInterval);
+			return;
+		}
+		refreshInviteCount();
+		if (inviteInterval) clearInterval(inviteInterval);
+		inviteInterval = setInterval(refreshInviteCount, 15000);
+		return () => {
+			if (inviteInterval) clearInterval(inviteInterval);
+		};
+	});
 </script>
 
 {#if authVal?.token}
@@ -60,7 +88,12 @@ async function addMeme(event) {
 		</div>
 		<div class="nav-links">
 			<a href="/profile" class:active={isActive('/profile')}>👤 Perfil</a>
-			<a href="/sessions" class:active={isActive('/sessions')}>🎬 Sesiones</a>
+			<a href="/sessions" class:active={isActive('/sessions')} class="sessions-link">
+				🎬 Sesiones
+				{#if pendingInvites > 0}
+					<span class="invite-badge">{pendingInvites}</span>
+				{/if}
+			</a>
 			<span class="nav-user">👤 {authVal.user?.display_name}</span>
 			<button class="btn-ghost" onclick={logout}>Salir</button>
 		</div>
@@ -106,6 +139,24 @@ async function addMeme(event) {
 	.nav-links a.active {
 		color: var(--text);
 		background: var(--bg-input);
+	}
+	.sessions-link {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.35rem;
+	}
+	.invite-badge {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		min-width: 1.1rem;
+		height: 1.1rem;
+		padding: 0 0.3rem;
+		border-radius: 999px;
+		font-size: 0.7rem;
+		font-weight: 700;
+		background: var(--accent);
+		color: #fff;
 	}
 	.nav-user {
 		font-size: 0.85rem;

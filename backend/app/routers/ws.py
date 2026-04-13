@@ -7,8 +7,10 @@ Messages are JSON with a "type" field:
   → Incoming (client → server):
       {"type":"navigate","index":3}     — move everyone to meme at index
       {"type":"vote","meme_id":7,"value":4}
+      {"type":"start"}
       {"type":"finish"}
   ← Outgoing (server → all clients in room):
+      {"type":"start","user":"display_name"}
       {"type":"navigate","index":3,"user":"display_name"}
       {"type":"vote","meme_id":7,"user_id":1,"value":4,"user":"name"}
       {"type":"finish","user":"display_name"}
@@ -150,6 +152,12 @@ async def session_ws(websocket: WebSocket, session_id: int, token: str = Query(.
                 await _broadcast(
                     session_id,
                     {"type": "finish", "user": display_name},
+                )
+
+            elif msg_type == "start":
+                await _broadcast(
+                    session_id,
+                    {"type": "start", "user": display_name},
                 )
 
             elif msg_type == "ready":
