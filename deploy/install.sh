@@ -147,7 +147,7 @@ ok "Migrations applied"
 # ---------- frontend build ----------
 if [[ -f "$APP_DIR/frontend/package.json" ]]; then
     msg "Building frontend…"
-    sudo -u "$APP_USER" bash -c "cd $APP_DIR/frontend && npm ci --silent && npm run build --silent"
+    sudo -u "$APP_USER" bash -c "cd $APP_DIR/frontend && npm install --legacy-peer-deps --silent && npm run build --silent"
     ok "Frontend built"
 else
     warn "Frontend not present yet — skipping"
