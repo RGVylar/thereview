@@ -46,8 +46,8 @@ class Meme(Base):
     )
 
     user: Mapped["User"] = relationship(back_populates="memes")
-    session_memes: Mapped[list["SessionMeme"]] = relationship(back_populates="meme")
-    votes: Mapped[list["Vote"]] = relationship(back_populates="meme")
+    session_memes: Mapped[list["SessionMeme"]] = relationship(back_populates="meme", cascade="all, delete-orphan")
+    votes: Mapped[list["Vote"]] = relationship(back_populates="meme", cascade="all, delete-orphan")
 
     __table_args__ = (
         UniqueConstraint("user_id", "url", name="uq_user_meme_url"),

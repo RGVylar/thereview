@@ -54,6 +54,14 @@ class MemeList(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class DeadCheckRequest(BaseModel):
+    urls: list[str]
+
+
+class DeadCheckResponse(BaseModel):
+    dead: list[str]
+
+
 # ── Session ───────────────────────────────────────────────────────────────────
 class SessionCreate(BaseModel):
     name: str

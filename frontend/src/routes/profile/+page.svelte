@@ -17,59 +17,14 @@
 	let perPage = $state(10);
 	let totalMemes = $state(0);
 
-	// ── Dead-video detection ────────────────────────────────────────────────────
-	/** Set of meme IDs confirmed as deleted/unavailable */
-	let deadIds = $state(new Set());
-	let checkingDead = $state(false);
-
-	async function checkDeadVideos() {
-		if (checkingDead) return;
-		checkingDead = true;
-		deadIds = new Set();
-
-		const tiktokMemes = memes.filter((m) => m.embed?.type === 'tiktok');
-
-		await Promise.all(
-			tiktokMemes.map(async (meme) => {
-				try {
-					// Extract numeric video ID from any tiktok share URL
-					const match = meme.url.match(/\/video\/(\d+)/);
-					if (!match) return;
-					const videoId = match[1];
-					const oembedUrl = `https://www.tiktok.com/oembed?url=${encodeURIComponent(`https://www.tiktok.com/video/${videoId}`)}`;
-					const res = await fetch(oembedUrl);
-					if (!res.ok) {
-						deadIds = new Set([...deadIds, meme.id]);
-					}
-				} catch {
-					// network failure — don't mark as dead
-				}
-			})
-		);
-
-		checkingDead = false;
-	}
-
-	async function deleteDeadVideos() {
-		const ids = [...deadIds];
-		for (const id of ids) {
-			try {
-				await api(`/api/memes/${id}`, { method: 'DELETE', token: authVal.token });
-			} catch {
-				// skip ones we can't delete (e.g. already reviewed)
-			}
-		}
-		deadIds = new Set();
-		await loadMemes();
-	}
-
-	// ── TikTok import state ───────────────────────────────────────────────────
+	// ── TikTok import state ──────────────────────────────────────────────────── ───────────────────────────────────────────────────
 	let showImport = $state(false);
 	let importStep = $state('idle'); // idle | parsed | importing | done
 	let importUrls = $state([]);     // extracted TikTok URLs
-	let importDone = $state(0);      // successfully imported count
+	let importDone = $state(0);
 	let importFailed = $state(0);
 	let importSkipped = $state(0);   // already existed
+	let importDead = $state(0);      // detected dead before import
 	let importError = $state('');
 	let importSources = $state({ favorites: true, likes: false });
 
@@ -114,13 +69,10 @@
 					return loadMemes();
 				}
 
-				deadIds = new Set();
 				memes = mapped;
 				for (const m of memes) {
 					if (m.embed.type === 'twitter') await loadTwitterEmbed(m.id, m.url);
 				}
-				// Auto-check for dead TikTok videos in background
-				if (mapped.some((m) => m.embed?.type === 'tiktok')) checkDeadVideos();
 			} catch (e) {
 				error = e.message || String(e);
 			} finally {
@@ -151,6 +103,17 @@
 	async function deleteMeme(id) {
 		try {
 			await api(`/api/memes/${id}`, { method: 'DELETE', token: authVal.token });
+			await loadMemes();
+		} catch (e) {
+			error = e.message || String(e);
+		}
+	}
+
+	async function deleteAllMemes() {
+		if (!confirm(`¿Borrar todos tus ${totalMemes} memes? Esta acción no se puede deshacer.`)) return;
+		try {
+			await api('/api/memes/all', { method: 'DELETE', token: authVal.token });
+			page = 1;
 			await loadMemes();
 		} catch (e) {
 			error = e.message || String(e);
@@ -330,12 +293,38 @@
 	}
 
 	async function runImport() {
-		importStep = 'importing';
 		importDone = 0;
 		importFailed = 0;
 		importSkipped = 0;
+		importDead = 0;
 
-		for (const url of importUrls) {
+		// Step 1: check which TikTok URLs are dead (server-side, no CORS)
+		importStep = 'checking';
+		let urlsToImport = importUrls;
+		const tiktokUrls = importUrls.filter((u) => {
+			try {
+				const h = new URL(u).hostname.replace('www.', '');
+				return h === 'tiktok.com' || h === 'vm.tiktok.com' || h === 'vt.tiktok.com' || h === 'tiktokv.com';
+			} catch { return false; }
+		});
+		if (tiktokUrls.length > 0) {
+			try {
+				const res = await api('/api/memes/check-dead', {
+					method: 'POST',
+					body: { urls: tiktokUrls },
+					token: authVal.token,
+				});
+				const deadSet = new Set(res.dead || []);
+				importDead = deadSet.size;
+				urlsToImport = importUrls.filter((u) => !deadSet.has(u));
+			} catch {
+				// If check fails, proceed with all URLs (don't block import)
+			}
+		}
+
+		// Step 2: import surviving URLs
+		importStep = 'importing';
+		for (const url of urlsToImport) {
 			try {
 				await api('/api/memes', {
 					method: 'POST',
@@ -363,15 +352,23 @@
 		importDone = 0;
 		importFailed = 0;
 		importSkipped = 0;
-		importError = '';			importSources = { favorites: true, likes: false };	}
+		importDead = 0;
+		importError = '';
+		importSources = { favorites: true, likes: false };
+	}
 </script>
 
 <div class="container">
 	<div class="profile-header">
 		<h2 class="page-title">📦 Mis Memes</h2>
-		<button class="btn-secondary import-btn" onclick={() => (showImport = !showImport)}>
-			🎵 Importar TikToks
-		</button>
+		<div class="header-actions">
+			{#if totalMemes > 0}
+				<button class="btn-danger-sm" onclick={deleteAllMemes}>🗑️ Borrar todos</button>
+			{/if}
+			<button class="btn-secondary import-btn" onclick={() => (showImport = !showImport)}>
+				🎵 Importar TikToks
+			</button>
+		</div>
 	</div>
 
 	<!-- TikTok import panel -->
@@ -435,13 +432,20 @@
 				</div>
 			{/if}
 
-			{#if importStep === 'importing'}
+			{#if importStep === 'checking'}
 				<div class="import-progress">
-					<p>Importando… {importDone + importFailed + importSkipped} / {importUrls.length}</p>
+					<p>🔍 Comprobando vídeos eliminados…</p>
+					<div class="progress-bar-wrap"><div class="progress-bar-fill" style="width: 30%"></div></div>
+				</div>
+			{/if}
+
+			{#if importStep === 'importing'}}
+				<div class="import-progress">
+					<p>Importando… {importDone + importFailed + importSkipped} / {importUrls.length - importDead}</p>
 					<div class="progress-bar-wrap">
 						<div
 							class="progress-bar-fill"
-							style="width: {((importDone + importFailed + importSkipped) / importUrls.length) * 100}%"
+							style="width: {((importDone + importFailed + importSkipped) / Math.max(1, importUrls.length - importDead)) * 100}%"
 						></div>
 					</div>
 				</div>
@@ -450,6 +454,9 @@
 			{#if importStep === 'done'}
 				<div class="import-result">
 					<p class="import-ok">✅ {importDone} importados correctamente</p>
+					{#if importDead > 0}
+						<p class="import-skip">🗑️ {importDead} eliminados en TikTok (omitidos)</p>
+					{/if}
 					{#if importSkipped > 0}
 						<p class="import-skip">⏭️ {importSkipped} ya existían (omitidos)</p>
 					{/if}
@@ -477,32 +484,19 @@
 			</div>
 		{/if}
 
-		{#if checkingDead}
-			<div class="dead-notice dead-checking">🔍 Comprobando vídeos eliminados...</div>
-		{:else if deadIds.size > 0}
-			<div class="dead-notice">
-				<span>🗑️ {deadIds.size} vídeo{deadIds.size > 1 ? 's' : ''} eliminado{deadIds.size > 1 ? 's' : ''} de TikTok en esta página</span>
-				<button class="btn-danger" onclick={deleteDeadVideos}>Borrar de la lista</button>
-			</div>
-		{/if}
-
 		<div class="meme-list">
 			{#each memes as meme (meme.id)}
 				<div class="card meme-card">
 					<div class="meme-header">
 						<div class="meme-tags">
 							<span class="meme-type">{meme.embed.type.toUpperCase()}</span>
-						{#if deadIds.has(meme.id)}
-							<span class="badge dead">🗑️ Eliminado</span>
-						{:else if meme.reviewed_at}
+							{#if meme.reviewed_at}
 								<span class="badge reviewed">✅ Revisado</span>
 							{:else}
 								<span class="badge pending">⏳ Pendiente</span>
 							{/if}
 						</div>
-						{#if !meme.reviewed_at}
-							<button class="btn-ghost" onclick={() => deleteMeme(meme.id)}>✕</button>
-						{/if}
+						<button class="btn-ghost" onclick={() => deleteMeme(meme.id)}>✕</button>
 					</div>
 
 					{#if meme.embed.type === 'youtube' && meme.embed.embedUrl}
@@ -585,44 +579,28 @@
 		background: rgba(241, 196, 15, 0.2);
 		color: #f1c40f;
 	}
-	.badge.dead {
-		background: rgba(231, 76, 60, 0.2);
-		color: #e74c3c;
-	}
 
-	/* Dead-video notice bar */
-	.dead-notice {
+	/* Header actions */
+	.header-actions {
 		display: flex;
+		gap: 0.5rem;
 		align-items: center;
-		justify-content: space-between;
-		gap: 1rem;
-		background: rgba(231, 76, 60, 0.12);
+	}
+	.btn-danger-sm {
+		background: rgba(231, 76, 60, 0.15);
+		color: #e74c3c;
 		border: 1px solid rgba(231, 76, 60, 0.3);
 		border-radius: 8px;
-		padding: 0.6rem 1rem;
-		font-size: 0.88rem;
-		margin-bottom: 0.75rem;
-	}
-	.dead-checking {
-		color: var(--text-muted);
-		background: var(--bg-input);
-		border-color: transparent;
-		justify-content: flex-start;
-	}
-	.btn-danger {
-		background: #e74c3c;
-		color: #fff;
-		border: none;
-		border-radius: 8px;
-		padding: 0.35rem 0.8rem;
-		font-size: 0.82rem;
+		padding: 0.45rem 0.9rem;
+		font-size: 0.85rem;
 		font-weight: 600;
 		cursor: pointer;
 		white-space: nowrap;
 	}
-	.btn-danger:hover {
-		background: #c0392b;
+	.btn-danger-sm:hover {
+		background: rgba(231, 76, 60, 0.3);
 	}
+
 	.embed-frame {
 		width: 100%;
 		aspect-ratio: 16/9;
