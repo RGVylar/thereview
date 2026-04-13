@@ -17,7 +17,32 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    # Remove duplicate rows (keep oldest) before adding constraint
+    # Find duplicate memes that will be removed (keep MIN id per user+url)
+    # First, delete session_memes rows referencing the duplicates to avoid FK violation
+    op.execute("""
+        DELETE FROM session_memes
+        WHERE meme_id IN (
+            SELECT id FROM memes
+            WHERE id NOT IN (
+                SELECT MIN(id)
+                FROM memes
+                GROUP BY user_id, url
+            )
+        )
+    """)
+    # Also delete votes referencing those duplicates (if votes table exists)
+    op.execute("""
+        DELETE FROM votes
+        WHERE meme_id IN (
+            SELECT id FROM memes
+            WHERE id NOT IN (
+                SELECT MIN(id)
+                FROM memes
+                GROUP BY user_id, url
+            )
+        )
+    """)
+    # Now safe to delete the duplicate meme rows
     op.execute("""
         DELETE FROM memes
         WHERE id NOT IN (
