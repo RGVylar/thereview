@@ -146,10 +146,11 @@
 	function extractUrlsFromJson(data) {
 		const found = new Set();
 
-		// Root container — TikTok uses "Likes and Favorites" as of 2024+
+		// Root container — try each known structural variant
 		const root =
-			data?.['Likes and Favorites'] ||
-			data?.Activity ||
+			data?.['Likes and Favorites'] ||                   // top-level (some exports)
+			data?.Activity?.['Likes and Favorites'] ||         // Activity > "Likes and Favorites" (most common)
+			data?.Activity ||                                  // older exports: favorites directly under Activity
 			data;
 
 		if (importSources.favorites) {
