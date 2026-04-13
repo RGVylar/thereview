@@ -17,6 +17,52 @@
 	let perPage = $state(10);
 	let totalMemes = $state(0);
 
+	// ── Dead-video detection ────────────────────────────────────────────────────
+	/** Set of meme IDs confirmed as deleted/unavailable */
+	let deadIds = $state(new Set());
+	let checkingDead = $state(false);
+
+	async function checkDeadVideos() {
+		if (checkingDead) return;
+		checkingDead = true;
+		deadIds = new Set();
+
+		const tiktokMemes = memes.filter((m) => m.embed?.type === 'tiktok');
+
+		await Promise.all(
+			tiktokMemes.map(async (meme) => {
+				try {
+					// Extract numeric video ID from any tiktok share URL
+					const match = meme.url.match(/\/video\/(\d+)/);
+					if (!match) return;
+					const videoId = match[1];
+					const oembedUrl = `https://www.tiktok.com/oembed?url=${encodeURIComponent(`https://www.tiktok.com/video/${videoId}`)}`;
+					const res = await fetch(oembedUrl);
+					if (!res.ok) {
+						deadIds = new Set([...deadIds, meme.id]);
+					}
+				} catch {
+					// network failure — don't mark as dead
+				}
+			})
+		);
+
+		checkingDead = false;
+	}
+
+	async function deleteDeadVideos() {
+		const ids = [...deadIds];
+		for (const id of ids) {
+			try {
+				await api(`/api/memes/${id}`, { method: 'DELETE', token: authVal.token });
+			} catch {
+				// skip ones we can't delete (e.g. already reviewed)
+			}
+		}
+		deadIds = new Set();
+		await loadMemes();
+	}
+
 	// ── TikTok import state ───────────────────────────────────────────────────
 	let showImport = $state(false);
 	let importStep = $state('idle'); // idle | parsed | importing | done
@@ -68,10 +114,13 @@
 					return loadMemes();
 				}
 
+				deadIds = new Set();
 				memes = mapped;
 				for (const m of memes) {
 					if (m.embed.type === 'twitter') await loadTwitterEmbed(m.id, m.url);
 				}
+				// Auto-check for dead TikTok videos in background
+				if (mapped.some((m) => m.embed?.type === 'tiktok')) checkDeadVideos();
 			} catch (e) {
 				error = e.message || String(e);
 			} finally {
@@ -428,13 +477,24 @@
 			</div>
 		{/if}
 
+		{#if checkingDead}
+			<div class="dead-notice dead-checking">🔍 Comprobando vídeos eliminados...</div>
+		{:else if deadIds.size > 0}
+			<div class="dead-notice">
+				<span>🗑️ {deadIds.size} vídeo{deadIds.size > 1 ? 's' : ''} eliminado{deadIds.size > 1 ? 's' : ''} de TikTok en esta página</span>
+				<button class="btn-danger" onclick={deleteDeadVideos}>Borrar de la lista</button>
+			</div>
+		{/if}
+
 		<div class="meme-list">
 			{#each memes as meme (meme.id)}
 				<div class="card meme-card">
 					<div class="meme-header">
 						<div class="meme-tags">
 							<span class="meme-type">{meme.embed.type.toUpperCase()}</span>
-							{#if meme.reviewed_at}
+						{#if deadIds.has(meme.id)}
+							<span class="badge dead">🗑️ Eliminado</span>
+						{:else if meme.reviewed_at}
 								<span class="badge reviewed">✅ Revisado</span>
 							{:else}
 								<span class="badge pending">⏳ Pendiente</span>
@@ -524,6 +584,44 @@
 	.badge.pending {
 		background: rgba(241, 196, 15, 0.2);
 		color: #f1c40f;
+	}
+	.badge.dead {
+		background: rgba(231, 76, 60, 0.2);
+		color: #e74c3c;
+	}
+
+	/* Dead-video notice bar */
+	.dead-notice {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 1rem;
+		background: rgba(231, 76, 60, 0.12);
+		border: 1px solid rgba(231, 76, 60, 0.3);
+		border-radius: 8px;
+		padding: 0.6rem 1rem;
+		font-size: 0.88rem;
+		margin-bottom: 0.75rem;
+	}
+	.dead-checking {
+		color: var(--text-muted);
+		background: var(--bg-input);
+		border-color: transparent;
+		justify-content: flex-start;
+	}
+	.btn-danger {
+		background: #e74c3c;
+		color: #fff;
+		border: none;
+		border-radius: 8px;
+		padding: 0.35rem 0.8rem;
+		font-size: 0.82rem;
+		font-weight: 600;
+		cursor: pointer;
+		white-space: nowrap;
+	}
+	.btn-danger:hover {
+		background: #c0392b;
 	}
 	.embed-frame {
 		width: 100%;
