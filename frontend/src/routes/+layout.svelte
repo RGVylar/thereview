@@ -50,8 +50,8 @@ async function addMeme() {
 {#if authVal?.token}
 	<nav class="navbar">
 		<a href="/" class="brand">🍿 The Review</a>
-		<div class="nav-add">
-			<form on:submit|preventDefault={addMeme} class="nav-add-form">
+			<div class="nav-add">
+				<form onsubmit|preventDefault={addMeme} class="nav-add-form">
 				<input bind:value={newUrl} placeholder="Pega la URL del meme" />
 				<button class="btn-primary" type="submit" disabled={adding}>{adding ? 'Añadiendo...' : 'Añadir'}</button>
 			</form>
