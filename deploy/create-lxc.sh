@@ -19,7 +19,7 @@ command -v pct >/dev/null || die "pct not found — run this on Proxmox host, no
 
 # ---------- config ----------
 CT_NAME="${CT_NAME:-thereview}"
-CT_ID="${CT_ID:-200}"
+CT_ID="${CT_ID:-201}"
 CT_STORAGE="${CT_STORAGE:-local-lvm}"
 CT_MEMORY="${CT_MEMORY:-2048}"
 CT_CORES="${CT_CORES:-2}"

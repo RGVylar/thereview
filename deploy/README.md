@@ -39,7 +39,7 @@ bash create-lxc.sh
 ```
 
 Env vars:
-- `CT_ID=200` — container ID
+- `CT_ID=201` — container ID
 - `CT_NAME=thereview` — hostname
 - `CT_STORAGE=local-lvm` — storage pool
 - `CT_MEMORY=2048` — RAM in MB
