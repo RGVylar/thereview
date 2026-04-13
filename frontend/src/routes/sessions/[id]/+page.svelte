@@ -303,8 +303,7 @@
 							<span class="meme-type">{embed.type}</span>
 							<span class="meme-author">by {session.participants.find(p => p.id === sm.meme.user_id)?.display_name || '?'}</span>
 						</div>
-
-						{#if embed.type === 'youtube' && embed.embedUrl}
+					{#key sm.meme.id}						{#if embed.type === 'youtube' && embed.embedUrl}
 							<iframe
 								src={embed.embedUrl}
 								title="YouTube"
@@ -350,11 +349,7 @@
 								🔗 Abrir {embed.type}
 							</a>
 						{/if}
-					</div>
-
-					<!-- Voting -->
-					<div class="voting">
-						<p class="vote-label">Tu voto:</p>
+					{/key}
 						<div class="vote-buttons">
 							{#each [1, 2, 3, 4, 5] as val}
 								<button
