@@ -111,7 +111,49 @@ async function addMeme(event) {
 		font-size: 0.85rem;
 		color: var(--text-muted);
 	}
+	.nav-add {
+		flex: 1;
+		max-width: 420px;
+		margin: 0 1rem;
+	}
+	.nav-add-form {
+		display: flex;
+		gap: 0.4rem;
+	}
+	.nav-add-form input {
+		flex: 1;
+		padding: 0.4rem 0.75rem;
+		font-size: 0.85rem;
+	}
+	.nav-add-form button {
+		white-space: nowrap;
+		padding: 0.4rem 0.8rem;
+		font-size: 0.85rem;
+	}
+	.nav-add-error {
+		color: var(--accent);
+		font-size: 0.75rem;
+		margin-top: 0.25rem;
+	}
 	main {
 		padding: 1rem 0;
+	}
+
+	@media (max-width: 640px) {
+		.navbar {
+			flex-wrap: wrap;
+			gap: 0.5rem;
+			padding: 0.5rem 1rem;
+		}
+		.nav-add {
+			order: 3;
+			max-width: 100%;
+			margin: 0;
+			flex-basis: 100%;
+		}
+		.nav-links {
+			gap: 0.5rem;
+			font-size: 0.85rem;
+		}
 	}
 </style>
