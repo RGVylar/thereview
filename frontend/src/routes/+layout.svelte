@@ -1,6 +1,7 @@
 <script>
 	import '../app.css';
 	import { auth } from '$lib/auth.js';
+	import { api } from '$lib/api.js';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 
@@ -9,7 +10,33 @@
 	let pageVal;
 	auth.subscribe((v) => (authVal = v));
 	page.subscribe((v) => (pageVal = v));
-
+ 
+	let newUrl = $state('');
+	let addError = $state('');
+	let adding = $state(false);
+ 
+async function addMeme() {
+	addError = '';
+	if (!newUrl || !newUrl.trim()) {
+		addError = 'Introduce una URL';
+		return;
+	}
+	adding = true;
+	try {
+		await api('/api/memes', {
+			method: 'POST',
+			body: { url: newUrl.trim() },
+			token: authVal.token,
+		});
+		newUrl = '';
+		// Navigate to profile so user can see the embed immediately
+		goto('/profile');
+	} catch (err) {
+		addError = err?.message || String(err);
+	} finally {
+		adding = false;
+	}
+}
 	function logout() {
 		auth.logout();
 		goto('/login');
@@ -23,8 +50,15 @@
 {#if authVal?.token}
 	<nav class="navbar">
 		<a href="/" class="brand">🍿 The Review</a>
+		<div class="nav-add">
+			<form on:submit|preventDefault={addMeme} class="nav-add-form">
+				<input bind:value={newUrl} placeholder="Pega la URL del meme" />
+				<button class="btn-primary" type="submit" disabled={adding}>{adding ? 'Añadiendo...' : 'Añadir'}</button>
+			</form>
+			{#if addError}<div class="nav-add-error">{addError}</div>{/if}
+		</div>
 		<div class="nav-links">
-			<a href="/memes" class:active={isActive('/memes')}>📦 Memes</a>
+			<a href="/profile" class:active={isActive('/profile')}>👤 Perfil</a>
 			<a href="/sessions" class:active={isActive('/sessions')}>🎬 Sesiones</a>
 			<span class="nav-user">👤 {authVal.user?.display_name}</span>
 			<button class="btn-ghost" onclick={logout}>Salir</button>
