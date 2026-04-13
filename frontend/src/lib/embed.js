@@ -8,7 +8,7 @@ export function detectEmbed(url) {
 		const u = new URL(url);
 		const host = u.hostname.replace('www.', '');
 
-		if (host.includes('tiktok.com')) {
+		if (host.includes('tiktok.com') || host === 'tiktokv.com') {
 			return {
 				type: 'tiktok',
 				embedUrl: `https://www.tiktok.com/embed/v2/${extractTikTokId(u)}`,
