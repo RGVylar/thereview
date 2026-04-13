@@ -19,6 +19,7 @@
 	let importDone = $state(0);      // successfully imported count
 	let importFailed = $state(0);
 	let importError = $state('');
+	let importSources = $state({ favorites: true, likes: false });
 
 	function tweetWidget(node) {
 		const tryLoad = () => {
@@ -110,9 +111,10 @@
 				const parsed = JSON.parse(text);
 				urls = extractUrlsFromJson(parsed);
 				if (urls.length === 0) {
-					// Show top-level keys to help diagnose format
-					const keys = Object.keys(parsed).join(', ');
-					importError = `No se encontraron vídeos guardados. Claves del archivo: [${keys}]. Prueba a subir el .zip completo.`;
+					// Show available sections to help diagnose unknown format
+					const activityKeys = parsed?.Activity ? Object.keys(parsed.Activity).join(', ') : '';
+					const topKeys = Object.keys(parsed).join(', ');
+					importError = `No se encontraron vídeos en "Guardados / Favoritos". Secciones disponibles en Activity: [${activityKeys || topKeys}]. Prueba a subir el .zip completo.`;
 					return;
 				}
 			} else if (file.name.endsWith('.txt')) {
@@ -139,57 +141,57 @@
 	}
 
 	/** Extract TikTok URLs from the user_data.json structure.
-	 *  Tries known key paths first, then falls back to a recursive scan. */
+	 *  Respects importSources checkboxes (favorites / likes). */
 	function extractUrlsFromJson(data) {
 		const found = new Set();
 
-		// ── Known structures (EN / ES / FR exports, several generations) ──────
-		const candidateLists = [
-			// EN format
-			data?.Activity?.['Favorite Videos']?.FavoriteVideoList,
-			data?.Activity?.['Like List']?.ItemFavoriteList,
-			data?.Activity?.['Browsing History']?.VideoList,
-			data?.Activity?.['Video Browsing History']?.VideoList,
-			data?.Activity?.['Share History']?.ShareHistoryList,
-			// Flat keys
-			data?.['Favorite Videos']?.FavoriteVideoList,
-			data?.['Like List']?.ItemFavoriteList,
-			// Some exports nest under "Activity" differently
-			data?.Activity?.FavoriteVideoList,
-			data?.Activity?.ItemFavoriteList,
-			// Spanish / French keys
-			data?.Activité?.['Vidéos favorites']?.FavoriteVideoList,
-		];
+		// Root container — TikTok uses "Likes and Favorites" as of 2024+
+		const root =
+			data?.['Likes and Favorites'] ||
+			data?.Activity ||
+			data;
 
-		for (const list of candidateLists) {
-			if (!Array.isArray(list)) continue;
-			for (const item of list) {
-				const url = item?.Link || item?.link || item?.Url || item?.url || item?.VideoLink;
-				if (url && isTikTokUrl(url)) found.add(url);
+		if (importSources.favorites) {
+			const favLists = [
+				root?.['Favorite Videos']?.FavoriteVideoList,
+				root?.FavoriteVideoList,
+				// French / Spanish
+				root?.['Vidéos favorites']?.FavoriteVideoList,
+				root?.['Videos favoritos']?.FavoriteVideoList,
+			];
+			for (const list of favLists) {
+				if (!Array.isArray(list)) continue;
+				for (const item of list) {
+					const url = item?.Link || item?.link || item?.Url || item?.url || item?.VideoLink;
+					if (url && isTikTokShareUrl(url)) found.add(url);
+				}
 			}
 		}
 
-		// ── Fallback: recursive full-JSON scan for any TikTok URL ────────────
-		if (found.size === 0) {
-			collectUrlsRecursive(data, found, 0);
+		if (importSources.likes) {
+			const likeLists = [
+				root?.['Like List']?.ItemFavoriteList,
+				root?.ItemFavoriteList,
+			];
+			for (const list of likeLists) {
+				if (!Array.isArray(list)) continue;
+				for (const item of list) {
+					const url = item?.Link || item?.link || item?.Url || item?.url || item?.VideoLink;
+					if (url && isTikTokShareUrl(url)) found.add(url);
+				}
+			}
 		}
 
 		return [...found];
 	}
 
-	/** Walk any JSON value up to depth 12, collect TikTok URLs from string fields. */
-	function collectUrlsRecursive(node, set, depth) {
-		if (depth > 12 || !node) return;
-		if (typeof node === 'string') {
-			if (isTikTokUrl(node)) set.add(node);
-			return;
-		}
-		if (Array.isArray(node)) {
-			for (const item of node) collectUrlsRecursive(item, set, depth + 1);
-			return;
-		}
-		if (typeof node === 'object') {
-			for (const val of Object.values(node)) collectUrlsRecursive(val, set, depth + 1);
+	/** Only accept real tiktok.com share URLs — NOT internal tiktokv.com CDN links */
+	function isTikTokShareUrl(url) {
+		try {
+			const h = new URL(url).hostname.replace('www.', '');
+			return h === 'tiktok.com' || h === 'vm.tiktok.com' || h === 'vt.tiktok.com';
+		} catch {
+			return false;
 		}
 	}
 
@@ -198,7 +200,7 @@
 		return text
 			.split('\n')
 			.map((l) => l.trim())
-			.filter(isTikTokUrl);
+			.filter(isTikTokShareUrl);
 	}
 
 	function isTikTokUrl(url) {
@@ -273,8 +275,7 @@
 		importUrls = [];
 		importDone = 0;
 		importFailed = 0;
-		importError = '';
-	}
+		importError = '';			importSources = { favorites: true, likes: false };	}
 </script>
 
 <div class="container">
@@ -298,6 +299,18 @@
 					<li>Cuando TikTok te mande el aviso, descarga el ZIP</li>
 					<li>Sube aquí el ZIP o el archivo <code>user_data.json</code> que hay dentro</li>
 				</ol>
+
+				<p class="import-source-label">¿Qué quieres importar?</p>
+				<div class="import-sources">
+					<label class="source-check">
+						<input type="checkbox" bind:checked={importSources.favorites} />
+						<span>⭐ Favoritos</span>
+					</label>
+					<label class="source-check">
+						<input type="checkbox" bind:checked={importSources.likes} />
+						<span>❤️ Me gusta</span>
+					</label>
+				</div>
 
 				<label class="file-label">
 					<input
@@ -562,6 +575,30 @@
 	}
 	.import-steps a {
 		color: var(--accent);
+	}
+	.import-source-label {
+		font-size: 0.85rem;
+		color: var(--text-muted);
+		margin-bottom: 0.5rem;
+	}
+	.import-sources {
+		display: flex;
+		gap: 1.5rem;
+		margin-bottom: 1.25rem;
+	}
+	.source-check {
+		display: flex;
+		align-items: center;
+		gap: 0.4rem;
+		cursor: pointer;
+		font-size: 0.95rem;
+	}
+	.source-check input[type='checkbox'] {
+		width: 1rem;
+		height: 1rem;
+		width: auto;
+		accent-color: var(--accent);
+		cursor: pointer;
 	}
 	.import-steps code {
 		background: var(--bg-input);
