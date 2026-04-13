@@ -45,6 +45,15 @@ class MemeOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class MemeList(BaseModel):
+    items: list[MemeOut]
+    total: int
+    page: int
+    per_page: int
+
+    model_config = {"from_attributes": True}
+
+
 # ── Session ───────────────────────────────────────────────────────────────────
 class SessionCreate(BaseModel):
     name: str

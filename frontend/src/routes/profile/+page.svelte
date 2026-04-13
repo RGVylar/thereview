@@ -12,6 +12,11 @@
 	let loading = $state(true);
 	let twitterEmbeds = $state({});
 
+	// Pagination state
+	let page = $state(1);
+	let perPage = $state(10);
+	let totalMemes = $state(0);
+
 	// ── TikTok import state ───────────────────────────────────────────────────
 	let showImport = $state(false);
 	let importStep = $state('idle'); // idle | parsed | importing | done
@@ -44,17 +49,34 @@
 	async function loadMemes() {
 		error = '';
 		loading = true;
-		try {
-			const data = await api('/api/memes?pending=false', { token: authVal.token });
-			memes = data.map((m) => ({ ...m, embed: detectEmbed(m.url) }));
-			for (const m of memes) {
-				if (m.embed.type === 'twitter') await loadTwitterEmbed(m.id, m.url);
+			try {
+				const res = await api(`/api/memes?pending=false&page=${page}&per_page=${perPage}`, { token: authVal.token });
+				let items = res;
+				if (!Array.isArray(res)) {
+					items = res.items || [];
+					totalMemes = res.total || 0;
+				} else {
+					totalMemes = items.length;
+				}
+
+				const mapped = items.map((m) => ({ ...m, embed: detectEmbed(m.url) }));
+
+				// If page became empty (e.g. after deletes), step back and reload
+				if (mapped.length === 0 && page > 1) {
+					page = Math.max(1, page - 1);
+					loading = false;
+					return loadMemes();
+				}
+
+				memes = mapped;
+				for (const m of memes) {
+					if (m.embed.type === 'twitter') await loadTwitterEmbed(m.id, m.url);
+				}
+			} catch (e) {
+				error = e.message || String(e);
+			} finally {
+				loading = false;
 			}
-		} catch (e) {
-			error = e.message || String(e);
-		} finally {
-			loading = false;
-		}
 	}
 
 	async function loadTwitterEmbed(memeId, url) {
@@ -398,6 +420,14 @@
 			<p class="error">{error}</p>
 		{/if}
 
+		{#if !loading}
+			<div class="pagination">
+				<button class="btn-ghost" disabled={page <= 1 || loading} onclick={() => { page = Math.max(1, page - 1); loadMemes(); }}>« Anterior</button>
+				<span class="page-indicator">Página {page} de {Math.max(1, Math.ceil(totalMemes / perPage))}</span>
+				<button class="btn-ghost" disabled={page >= Math.max(1, Math.ceil(totalMemes / perPage)) || loading} onclick={() => { page = Math.min(Math.max(1, Math.ceil(totalMemes / perPage)), page + 1); loadMemes(); }}>Siguiente »</button>
+			</div>
+		{/if}
+
 		<div class="meme-list">
 			{#each memes as meme (meme.id)}
 				<div class="card meme-card">
@@ -702,5 +732,18 @@
 	.import-warn {
 		color: #f1c40f;
 		font-size: 0.85rem;
+	}
+
+	/* Pagination */
+	.pagination {
+		display: flex;
+		gap: 0.75rem;
+		align-items: center;
+		justify-content: center;
+		margin: 1rem 0;
+	}
+	.page-indicator {
+		color: var(--text-muted);
+		font-weight: 600;
 	}
 </style>

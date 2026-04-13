@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session as DBSession
 from app.auth import get_current_user
 from app.database import get_db
 from app.models import Meme, User
-from app.schemas import MemeCreate, MemeOut
+from app.schemas import MemeCreate, MemeOut, MemeList
 
 router = APIRouter(prefix="/api/memes", tags=["memes"])
 
@@ -28,16 +28,26 @@ def add_meme(
     return meme
 
 
-@router.get("", response_model=list[MemeOut])
+@router.get("", response_model=MemeList)
 def list_my_memes(
     pending: bool = True,
+    page: int = 1,
+    per_page: int = 10,
     db: DBSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    query = db.query(Meme).filter(Meme.user_id == current_user.id)
+    base = db.query(Meme).filter(Meme.user_id == current_user.id)
     if pending:
-        query = query.filter(Meme.reviewed_at.is_(None))
-    return query.order_by(Meme.created_at.desc()).all()
+        base = base.filter(Meme.reviewed_at.is_(None))
+
+    total = base.count()
+    items = (
+        base.order_by(Meme.created_at.desc())
+        .offset((page - 1) * per_page)
+        .limit(per_page)
+        .all()
+    )
+    return {"items": items, "total": total, "page": page, "per_page": per_page}
 
 
 @router.delete("/{meme_id}", status_code=status.HTTP_204_NO_CONTENT)
