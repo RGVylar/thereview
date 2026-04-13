@@ -12,6 +12,14 @@
 	let loading = $state(true);
 	let twitterEmbeds = $state({});
 
+	// ── TikTok import state ───────────────────────────────────────────────────
+	let showImport = $state(false);
+	let importStep = $state('idle'); // idle | parsed | importing | done
+	let importUrls = $state([]);     // extracted TikTok URLs
+	let importDone = $state(0);      // successfully imported count
+	let importFailed = $state(0);
+	let importError = $state('');
+
 	function tweetWidget(node) {
 		const tryLoad = () => {
 			if (window.twttr?.widgets) {
@@ -75,10 +83,242 @@
 			error = e.message || String(e);
 		}
 	}
+
+	// ── TikTok import ────────────────────────────────────────────────────────
+
+	/**
+	 * Parse TikTok data export. Accepts:
+	 *  - user_data.json  (full export JSON)
+	 *  - Favorite Videos.txt  (plain list of URLs, one per line)
+	 *  - A .zip file with any of the above inside
+	 */
+	async function handleImportFile(e) {
+		importError = '';
+		importUrls = [];
+		importStep = 'idle';
+
+		const file = e.target.files?.[0];
+		if (!file) return;
+
+		try {
+			let urls = [];
+
+			if (file.name.endsWith('.zip')) {
+				urls = await parseZip(file);
+			} else if (file.name.endsWith('.json')) {
+				const text = await file.text();
+				urls = extractUrlsFromJson(JSON.parse(text));
+			} else if (file.name.endsWith('.txt')) {
+				const text = await file.text();
+				urls = extractUrlsFromText(text);
+			} else {
+				importError = 'Formato no soportado. Usa el archivo user_data.json o el .zip de TikTok.';
+				return;
+			}
+
+			if (urls.length === 0) {
+				importError = 'No se encontraron vídeos guardados en el archivo.';
+				return;
+			}
+
+			importUrls = urls;
+			importStep = 'parsed';
+		} catch (err) {
+			importError = 'Error al leer el archivo: ' + (err?.message || String(err));
+		}
+
+		// Reset input so same file can be picked again
+		e.target.value = '';
+	}
+
+	/** Extract TikTok URLs from the user_data.json structure */
+	function extractUrlsFromJson(data) {
+		try {
+			// Format 1: Activity > Favorite Videos > FavoriteVideoList
+			const list =
+				data?.Activity?.['Favorite Videos']?.FavoriteVideoList ||
+				data?.Activity?.FavoriteVideoList ||
+				data?.['Favorite Videos']?.FavoriteVideoList ||
+				[];
+			const fromFavs = list.map((v) => v?.Link || v?.link).filter(Boolean);
+
+			// Format 2: Activity > Like List > ItemFavoriteList
+			const likeList =
+				data?.Activity?.['Like List']?.ItemFavoriteList ||
+				data?.Activity?.ItemFavoriteList ||
+				[];
+			const fromLikes = likeList.map((v) => v?.Link || v?.link).filter(Boolean);
+
+			return [...new Set([...fromFavs, ...fromLikes])].filter(isTikTokUrl);
+		} catch {
+			return [];
+		}
+	}
+
+	/** Extract URLs from a plain-text file (one URL per line) */
+	function extractUrlsFromText(text) {
+		return text
+			.split('\n')
+			.map((l) => l.trim())
+			.filter(isTikTokUrl);
+	}
+
+	function isTikTokUrl(url) {
+		try {
+			const h = new URL(url).hostname;
+			return h.includes('tiktok.com') || h.includes('tiktokv.com');
+		} catch {
+			return false;
+		}
+	}
+
+	/** Parse a .zip file looking for user_data.json or Favorite Videos.txt */
+	async function parseZip(file) {
+		// Dynamically load JSZip from CDN (no npm dep needed)
+		if (!window.JSZip) {
+			await loadScript('https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js');
+		}
+		const zip = await window.JSZip.loadAsync(file);
+
+		// Try user_data.json first
+		const jsonFile = zip.file(/user_data\.json/i)[0];
+		if (jsonFile) {
+			const text = await jsonFile.async('text');
+			return extractUrlsFromJson(JSON.parse(text));
+		}
+
+		// Try Favorite Videos.txt
+		const txtFile = zip.file(/favorite.*videos/i)[0] || zip.file(/Favoris/i)[0];
+		if (txtFile) {
+			const text = await txtFile.async('text');
+			return extractUrlsFromText(text);
+		}
+
+		return [];
+	}
+
+	function loadScript(src) {
+		return new Promise((resolve, reject) => {
+			const s = document.createElement('script');
+			s.src = src;
+			s.onload = resolve;
+			s.onerror = () => reject(new Error('No se pudo cargar ' + src));
+			document.head.appendChild(s);
+		});
+	}
+
+	async function runImport() {
+		importStep = 'importing';
+		importDone = 0;
+		importFailed = 0;
+
+		for (const url of importUrls) {
+			try {
+				await api('/api/memes', {
+					method: 'POST',
+					body: { url },
+					token: authVal.token,
+				});
+				importDone++;
+			} catch {
+				importFailed++;
+			}
+		}
+
+		importStep = 'done';
+		await loadMemes();
+	}
+
+	function resetImport() {
+		showImport = false;
+		importStep = 'idle';
+		importUrls = [];
+		importDone = 0;
+		importFailed = 0;
+		importError = '';
+	}
 </script>
 
 <div class="container">
-	<h2 class="page-title">📦 Mis Memes</h2>
+	<div class="profile-header">
+		<h2 class="page-title">📦 Mis Memes</h2>
+		<button class="btn-secondary import-btn" onclick={() => (showImport = !showImport)}>
+			🎵 Importar TikToks
+		</button>
+	</div>
+
+	<!-- TikTok import panel -->
+	{#if showImport}
+		<div class="card import-panel">
+			<h3 class="import-title">📥 Importar guardados de TikTok</h3>
+
+			{#if importStep === 'idle'}
+				<ol class="import-steps">
+					<li>Abre TikTok en el móvil o en <a href="https://www.tiktok.com/setting" target="_blank" rel="noopener noreferrer">tiktok.com/setting</a></li>
+					<li>Ve a <strong>Privacidad → Descarga tus datos</strong></li>
+					<li>Elige formato <strong>JSON</strong> y solicita el archivo</li>
+					<li>Cuando TikTok te mande el aviso, descarga el ZIP</li>
+					<li>Sube aquí el ZIP o el archivo <code>user_data.json</code> que hay dentro</li>
+				</ol>
+
+				<label class="file-label">
+					<input
+						type="file"
+						accept=".zip,.json,.txt"
+						onchange={handleImportFile}
+						class="file-input"
+					/>
+					<span class="file-btn btn-primary">📂 Seleccionar archivo</span>
+				</label>
+
+				{#if importError}
+					<p class="import-error">{importError}</p>
+				{/if}
+			{/if}
+
+			{#if importStep === 'parsed'}
+				<p class="import-found">
+					✅ Se encontraron <strong>{importUrls.length}</strong> vídeos guardados.
+				</p>
+				<div class="import-preview">
+					{#each importUrls.slice(0, 5) as url}
+						<span class="import-url">{url}</span>
+					{/each}
+					{#if importUrls.length > 5}
+						<span class="import-more">… y {importUrls.length - 5} más</span>
+					{/if}
+				</div>
+				<div class="import-actions">
+					<button class="btn-secondary" onclick={resetImport}>Cancelar</button>
+					<button class="btn-primary" onclick={runImport}>
+						⬆️ Importar todos
+					</button>
+				</div>
+			{/if}
+
+			{#if importStep === 'importing'}
+				<div class="import-progress">
+					<p>Importando… {importDone + importFailed} / {importUrls.length}</p>
+					<div class="progress-bar-wrap">
+						<div
+							class="progress-bar-fill"
+							style="width: {((importDone + importFailed) / importUrls.length) * 100}%"
+						></div>
+					</div>
+				</div>
+			{/if}
+
+			{#if importStep === 'done'}
+				<div class="import-result">
+					<p class="import-ok">✅ {importDone} importados correctamente</p>
+					{#if importFailed > 0}
+						<p class="import-warn">⚠️ {importFailed} fallaron (puede que ya existieran)</p>
+					{/if}
+					<button class="btn-primary" onclick={resetImport}>Cerrar</button>
+				</div>
+			{/if}
+		</div>
+	{/if}
 
 	{#if loading}
 		<p class="loading-text">Cargando...</p>
@@ -245,6 +485,123 @@
 	}
 	.empty-hint {
 		color: var(--text-muted);
+		font-size: 0.85rem;
+	}
+
+	/* ── Profile header ──────────────────────────────────── */
+	.profile-header {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		margin-bottom: 1rem;
+	}
+	.profile-header .page-title {
+		margin-bottom: 0;
+	}
+	.import-btn {
+		white-space: nowrap;
+		font-size: 0.85rem;
+		padding: 0.45rem 0.9rem;
+	}
+
+	/* ── Import panel ────────────────────────────────────── */
+	.import-panel {
+		margin-bottom: 1.5rem;
+	}
+	.import-title {
+		font-size: 1.1rem;
+		font-weight: 700;
+		margin-bottom: 1rem;
+	}
+	.import-steps {
+		color: var(--text-muted);
+		font-size: 0.88rem;
+		padding-left: 1.2rem;
+		display: flex;
+		flex-direction: column;
+		gap: 0.4rem;
+		margin-bottom: 1.25rem;
+	}
+	.import-steps a {
+		color: var(--accent);
+	}
+	.import-steps code {
+		background: var(--bg-input);
+		padding: 0.1rem 0.35rem;
+		border-radius: 4px;
+		font-size: 0.82rem;
+	}
+	.file-label {
+		display: inline-block;
+		cursor: pointer;
+	}
+	.file-input {
+		display: none;
+	}
+	.file-btn {
+		display: inline-block;
+		width: auto;
+		cursor: pointer;
+	}
+	.import-error {
+		color: var(--accent);
+		font-size: 0.85rem;
+		margin-top: 0.75rem;
+	}
+	.import-found {
+		font-size: 1rem;
+		margin-bottom: 0.75rem;
+	}
+	.import-preview {
+		display: flex;
+		flex-direction: column;
+		gap: 0.25rem;
+		background: var(--bg-input);
+		border-radius: 8px;
+		padding: 0.75rem;
+		margin-bottom: 1rem;
+		font-size: 0.78rem;
+	}
+	.import-url {
+		color: var(--text-muted);
+		word-break: break-all;
+	}
+	.import-more {
+		color: var(--accent);
+		font-weight: 600;
+	}
+	.import-actions {
+		display: flex;
+		gap: 0.5rem;
+		justify-content: flex-end;
+	}
+	.import-progress {
+		text-align: center;
+	}
+	.progress-bar-wrap {
+		height: 6px;
+		background: var(--bg-input);
+		border-radius: 3px;
+		margin-top: 0.75rem;
+		overflow: hidden;
+	}
+	.progress-bar-fill {
+		height: 100%;
+		background: var(--accent);
+		transition: width 0.2s ease;
+	}
+	.import-result {
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+		align-items: flex-start;
+	}
+	.import-ok {
+		color: #27ae60;
+		font-weight: 600;
+	}
+	.import-warn {
+		color: #f1c40f;
 		font-size: 0.85rem;
 	}
 </style>
