@@ -107,7 +107,14 @@
 				urls = await parseZip(file);
 			} else if (file.name.endsWith('.json')) {
 				const text = await file.text();
-				urls = extractUrlsFromJson(JSON.parse(text));
+				const parsed = JSON.parse(text);
+				urls = extractUrlsFromJson(parsed);
+				if (urls.length === 0) {
+					// Show top-level keys to help diagnose format
+					const keys = Object.keys(parsed).join(', ');
+					importError = `No se encontraron vídeos guardados. Claves del archivo: [${keys}]. Prueba a subir el .zip completo.`;
+					return;
+				}
 			} else if (file.name.endsWith('.txt')) {
 				const text = await file.text();
 				urls = extractUrlsFromText(text);
@@ -131,27 +138,58 @@
 		e.target.value = '';
 	}
 
-	/** Extract TikTok URLs from the user_data.json structure */
+	/** Extract TikTok URLs from the user_data.json structure.
+	 *  Tries known key paths first, then falls back to a recursive scan. */
 	function extractUrlsFromJson(data) {
-		try {
-			// Format 1: Activity > Favorite Videos > FavoriteVideoList
-			const list =
-				data?.Activity?.['Favorite Videos']?.FavoriteVideoList ||
-				data?.Activity?.FavoriteVideoList ||
-				data?.['Favorite Videos']?.FavoriteVideoList ||
-				[];
-			const fromFavs = list.map((v) => v?.Link || v?.link).filter(Boolean);
+		const found = new Set();
 
-			// Format 2: Activity > Like List > ItemFavoriteList
-			const likeList =
-				data?.Activity?.['Like List']?.ItemFavoriteList ||
-				data?.Activity?.ItemFavoriteList ||
-				[];
-			const fromLikes = likeList.map((v) => v?.Link || v?.link).filter(Boolean);
+		// ── Known structures (EN / ES / FR exports, several generations) ──────
+		const candidateLists = [
+			// EN format
+			data?.Activity?.['Favorite Videos']?.FavoriteVideoList,
+			data?.Activity?.['Like List']?.ItemFavoriteList,
+			data?.Activity?.['Browsing History']?.VideoList,
+			data?.Activity?.['Video Browsing History']?.VideoList,
+			data?.Activity?.['Share History']?.ShareHistoryList,
+			// Flat keys
+			data?.['Favorite Videos']?.FavoriteVideoList,
+			data?.['Like List']?.ItemFavoriteList,
+			// Some exports nest under "Activity" differently
+			data?.Activity?.FavoriteVideoList,
+			data?.Activity?.ItemFavoriteList,
+			// Spanish / French keys
+			data?.Activité?.['Vidéos favorites']?.FavoriteVideoList,
+		];
 
-			return [...new Set([...fromFavs, ...fromLikes])].filter(isTikTokUrl);
-		} catch {
-			return [];
+		for (const list of candidateLists) {
+			if (!Array.isArray(list)) continue;
+			for (const item of list) {
+				const url = item?.Link || item?.link || item?.Url || item?.url || item?.VideoLink;
+				if (url && isTikTokUrl(url)) found.add(url);
+			}
+		}
+
+		// ── Fallback: recursive full-JSON scan for any TikTok URL ────────────
+		if (found.size === 0) {
+			collectUrlsRecursive(data, found, 0);
+		}
+
+		return [...found];
+	}
+
+	/** Walk any JSON value up to depth 12, collect TikTok URLs from string fields. */
+	function collectUrlsRecursive(node, set, depth) {
+		if (depth > 12 || !node) return;
+		if (typeof node === 'string') {
+			if (isTikTokUrl(node)) set.add(node);
+			return;
+		}
+		if (Array.isArray(node)) {
+			for (const item of node) collectUrlsRecursive(item, set, depth + 1);
+			return;
+		}
+		if (typeof node === 'object') {
+			for (const val of Object.values(node)) collectUrlsRecursive(val, set, depth + 1);
 		}
 	}
 
