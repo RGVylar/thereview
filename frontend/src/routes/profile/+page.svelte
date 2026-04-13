@@ -148,9 +148,9 @@
 
 		// Root container — try each known structural variant
 		const root =
-			data?.['Likes and Favorites'] ||                   // top-level (some exports)
-			data?.Activity?.['Likes and Favorites'] ||         // Activity > "Likes and Favorites" (most common)
-			data?.Activity ||                                  // older exports: favorites directly under Activity
+			data?.['Likes and Favorites'] ||                   // current format (top-level)
+			data?.Activity?.['Likes and Favorites'] ||         // older format under Activity
+			data?.Activity ||                                  // even older exports
 			data;
 
 		if (importSources.favorites) {
