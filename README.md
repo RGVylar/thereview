@@ -110,3 +110,15 @@ sudo bash deploy/setup.sh
 ```
 
 Luego configurar Cloudflare Tunnel apuntando al puerto de Caddy.
+
+## Useful commands
+```
+pct exec 201 -- bash -lc '
+  cd /opt/thereview &&
+  sudo -u thereview git pull &&
+  cd frontend && sudo -u thereview npm run build --silent &&
+  systemctl restart thereview-api &&
+  systemctl reload caddy
+'
+pct exec 201 -- bash -lc 'cd /opt/thereview && sudo -u thereview git pull && cd backend && sudo -u thereview .venv/bin/alembic upgrade head && cd ../frontend && sudo -u thereview npm run build --silent && systemctl restart thereview-api && systemctl reload caddy'
+```
