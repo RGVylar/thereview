@@ -163,6 +163,28 @@
 								allowfullscreen
 								class="embed-frame"
 							></iframe>
+						{:else if embed.type === 'tiktok' && embed.embedUrl}
+							<iframe
+								src={embed.embedUrl}
+								title="TikTok"
+								allow="autoplay"
+								allowfullscreen
+								class="embed-frame tiktok-frame"
+							></iframe>
+						{:else if embed.type === 'instagram' && embed.embedUrl}
+							<iframe
+								src={embed.embedUrl}
+								title="Instagram"
+								allowfullscreen
+								class="embed-frame instagram-frame"
+							></iframe>
+						{:else if embed.type === 'twitter'}
+							<div class="twitter-embed">
+								<p class="tweet-hint">Twitter/X no permite embeds directos.</p>
+								<a href={sm.meme.url} target="_blank" rel="noopener noreferrer" class="btn-secondary open-btn">
+									🐦 Abrir en Twitter/X
+								</a>
+							</div>
 						{:else if embed.type === 'image'}
 							<img src={sm.meme.url} alt="meme" class="meme-img" />
 						{:else}
@@ -226,15 +248,19 @@
 				</div>
 
 				{#each ranking.length ? ranking : [] as entry, i (entry.meme_id)}
+					{@const rankEmbed = detectEmbed(entry.url)}
 					<div class="card ranking-card">
-						<div class="rank">#{i + 1}</div>
+						<div class="rank">{i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i + 1}`}</div>
+						{#if rankEmbed.type === 'image'}
+							<img src={entry.url} alt="meme" class="rank-thumb" />
+						{/if}
 						<div class="rank-info">
 							<a href={entry.url} target="_blank" rel="noopener noreferrer">
 								{entry.url.length > 60 ? entry.url.slice(0, 60) + '...' : entry.url}
 							</a>
 							<span class="rank-meta">by {entry.submitted_by} · {entry.vote_count} votos</span>
 						</div>
-						<div class="rank-score">{entry.total_score}</div>
+						<div class="rank-score">{entry.total_score} pts</div>
 					</div>
 				{:else}
 					<p class="empty">No hay votos todavía</p>
@@ -427,6 +453,36 @@
 	.rank-score {
 		font-size: 1.8rem;
 		font-weight: 700;
+	}
+	.rank-thumb {
+		width: 56px;
+		height: 56px;
+		object-fit: cover;
+		border-radius: 8px;
+		flex-shrink: 0;
+	}
+	.tiktok-frame {
+		aspect-ratio: 9/16;
+		max-height: 560px;
+	}
+	.instagram-frame {
+		aspect-ratio: 4/5;
+		max-height: 500px;
+	}
+	.twitter-embed {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 1rem;
+		padding: 2rem;
+		color: var(--text-muted);
+	}
+	.tweet-hint {
+		font-size: 0.85rem;
+	}
+	.open-btn {
+		display: inline-block;
+		padding: 0.6rem 1.2rem;
 	}
 	.empty {
 		text-align: center;
