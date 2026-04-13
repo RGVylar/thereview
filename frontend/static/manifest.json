@@ -1,0 +1,10 @@
+{
+	"name": "The Review",
+	"short_name": "TheReview",
+	"start_url": "/",
+	"display": "standalone",
+	"background_color": "#1a1a2e",
+	"theme_color": "#1a1a2e",
+	"description": "Meme review sessions with friends",
+	"icons": []
+}
