@@ -26,8 +26,10 @@
 		let responded = false;
 
 		function handleMessage(e) {
-			if (!e?.data) return;
-			if (e.data.type === 'THEREVIEW_EXTENSION_PONG') {
+			console.debug('thereview: message received', e?.data, 'origin', e?.origin);
+			const data = e?.data;
+			if (!data) return;
+			if (data.type === 'THEREVIEW_EXTENSION_PONG') {
 				responded = true;
 				extInstalled = true;
 				window.removeEventListener('message', handleMessage);
@@ -35,6 +37,14 @@
 		}
 
 		window.addEventListener('message', handleMessage);
+
+		// Fallback rápido: si el script inyectado en la página expone la bandera, marcar como instalado
+		if (window.__THEREVIEW_EXTENSION_INSTALLED) {
+			responded = true;
+			extInstalled = true;
+			window.removeEventListener('message', handleMessage);
+			return;
+		}
 
 		// Reintentar ping varias veces (hasta ~3s) por si la inyección del content-script tarda
 		let attempts = 0;
