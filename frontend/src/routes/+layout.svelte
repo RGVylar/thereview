@@ -6,6 +6,8 @@
 	import { page } from '$app/stores';
 	import { onMount } from 'svelte';
 
+	let { children } = $props();
+
 	let extInstalled = null; // null = detecting, true = installed, false = not installed
 	let newUrl = '';
 	let adding = false;
