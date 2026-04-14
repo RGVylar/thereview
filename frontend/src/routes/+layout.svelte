@@ -113,12 +113,36 @@ async function addMeme(event) {
 			return;
 		}
 		refreshInviteCount();
-		if (inviteInterval) clearInterval(inviteInterval);
-		inviteInterval = setInterval(refreshInviteCount, 15000);
-		return () => {
-			if (inviteInterval) clearInterval(inviteInterval);
-		};
+			background: rgba(255, 165, 0, 0.06);
+			color: var(--text);
+			padding: 0.5rem 1rem;
+			border-bottom: 1px solid rgba(255,165,0,0.08);
+			font-size: 0.95rem;
+			justify-content: space-between;
+			padding-left: 1.25rem;
+			padding-right: 1.25rem;
+			gap: 1rem;
 	});
+
+		.extension-banner-urgent {
+			background: rgba(220,53,69,0.06);
+			border-bottom: 1px solid rgba(220,53,69,0.08);
+			color: var(--text);
+		}
+
+		.banner-content {
+			display: flex;
+			flex-direction: column;
+		}
+
+		.banner-sub {
+			font-size: 0.85rem;
+			color: var(--text-muted);
+		}
+
+		.banner-actions {
+			display: flex;
+			gap: 0.5rem;
 </script>
 
 {#if authVal?.token}
@@ -141,14 +165,25 @@ async function addMeme(event) {
 			</a>
 			<span class="nav-user">👤 {authVal.user?.display_name}</span>
 			<button class="btn-ghost" onclick={logout}>Salir</button>
+			{#if extInstalled === true}
+				<span class="ext-status ext-connected" title="Extensión instalada">🔌 Extensión activa</span>
+			{:else if extInstalled === null}
+				<span class="ext-status ext-pending" title="Detectando extensión"><span class="dot"></span> Detectando extensión…</span>
+			{/if}
 		</div>
 	</nav>
 {/if}
 
 {#if extInstalled === false}
-	<div class="extension-banner">
-		La extensión de sincronización no está instalada.
-		<button class="btn-ghost" onclick={showInstallInstructions}>Instrucciones</button>
+	<div class="extension-banner extension-banner-urgent">
+		<div class="banner-content">
+			<strong>Por favor, instala la extensión</strong>
+			<div class="banner-sub">Necesaria para reproducción sincronizada de TikTok/X/Twitter.</div>
+		</div>
+		<div class="banner-actions">
+			<button class="btn-primary" onclick={showInstallInstructions}>Instalar / Ver instrucciones</button>
+			<button class="btn-ghost" onclick={() => (extInstalled = null)}>Recordar más tarde</button>
+		</div>
 	</div>
 {/if}
 
@@ -237,6 +272,40 @@ async function addMeme(event) {
 		color: var(--accent);
 		font-size: 0.75rem;
 		margin-top: 0.25rem;
+	}
+
+	.ext-status {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.45rem;
+		font-size: 0.85rem;
+		padding: 0.18rem 0.5rem;
+		border-radius: 8px;
+		margin-left: 0.5rem;
+	}
+
+	.ext-status .dot {
+		width: 8px;
+		height: 8px;
+		border-radius: 50%;
+		background: #ff9800;
+		animation: pulse 1s infinite ease-in-out;
+	}
+
+	.ext-connected {
+		background: rgba(40, 167, 69, 0.08);
+		color: #28a745;
+	}
+
+	.ext-pending {
+		background: rgba(255,165,0,0.06);
+		color: #ff9800;
+	}
+
+	@keyframes pulse {
+		0% { transform: scale(1); opacity: 1; }
+		50% { transform: scale(1.4); opacity: 0.5; }
+		100% { transform: scale(1); opacity: 1; }
 	}
 
 	.extension-banner {
