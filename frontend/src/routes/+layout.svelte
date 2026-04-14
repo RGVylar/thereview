@@ -58,12 +58,28 @@
 			}
 		}, 500);
 
+		// Poll for the injected page flag in case it appears after mount
+		let flagCheckInterval = setInterval(() => {
+			try {
+				if (window.__THEREVIEW_EXTENSION_INSTALLED) {
+					responded = true;
+					extInstalled = true;
+					clearInterval(flagCheckInterval);
+					clearInterval(pingInterval);
+					window.removeEventListener('message', handleMessage);
+				}
+			} catch (err) {
+				// ignore
+			}
+		}, 300);
+
 		// enviar un ping inmediato
 		window.postMessage({ type: 'THEREVIEW_EXTENSION_PING' }, '*');
 
 		return () => {
 			window.removeEventListener('message', handleMessage);
 			clearInterval(pingInterval);
+			clearInterval(flagCheckInterval);
 		};
 	});
  
