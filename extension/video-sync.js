@@ -53,8 +53,12 @@
 
     for (const evt of ['play', 'pause', 'seeked']) {
       video.addEventListener(evt, () => {
-        if (isSyncing) return;
         const action = evt === 'seeked' ? 'seek' : evt;
+        chrome.runtime.sendMessage({
+          type: 'TR_PLAYBACK_STATE',
+          payload: { playing: !video.paused, currentTime: video.currentTime },
+        }).catch(() => {});
+        if (isSyncing) return;
         chrome.runtime.sendMessage({
           type: 'TR_PLAYBACK_LOCAL',
           payload: { action, currentTime: video.currentTime },

@@ -81,18 +81,32 @@
 			// Listen for local video events relayed from extension → send via WS
 			if (extPlaybackHandler) window.removeEventListener('message', extPlaybackHandler);
 			extPlaybackHandler = (e) => {
-				if (e.data?.type !== 'THEREVIEW_PLAYBACK_LOCAL') return;
+				const type = e.data?.type;
+				if (!type) return;
+				const uid = authVal.user?.id;
+				if (type === 'THEREVIEW_PLAYBACK_STATE') {
+					if (uid) {
+						playbackStates = {
+							...playbackStates,
+							[uid]: { playing: !!e.data.playing, currentTime: e.data.currentTime }
+						};
+					}
+					if (socket.readyState === WebSocket.OPEN) {
+						socket.send(JSON.stringify({
+							type: 'playback_state',
+							playing: !!e.data.playing,
+							currentTime: e.data.currentTime,
+						}));
+					}
+					return;
+				}
+				if (type !== 'THEREVIEW_PLAYBACK_LOCAL') return;
 				if (socket.readyState !== WebSocket.OPEN) return;
 				socket.send(JSON.stringify({
 					type: 'playback',
 					action: e.data.action,
 					currentTime: e.data.currentTime,
 				}));
-				// Update own state locally (WS broadcast excludes sender)
-				const uid = authVal.user?.id;
-				if (uid) {
-					playbackStates = { ...playbackStates, [uid]: { playing: e.data.action === 'play' } };
-				}
 			};
 			window.addEventListener('message', extPlaybackHandler);
 		};
@@ -127,10 +141,6 @@
 				} else if (msg.type === 'play_sync') {
 					// legacy — absorbed by playback system
 				} else if (msg.type === 'playback') {
-					// Track remote user playback state
-					if (msg.user_id) {
-						playbackStates = { ...playbackStates, [msg.user_id]: { playing: msg.action === 'play' } };
-					}
 					// Relay remote playback command to the embed iframe
 					try {
 						const iframe = document.querySelector('.meme-display iframe');
@@ -140,6 +150,13 @@
 							window.postMessage({ type: 'THEREVIEW_PLAYBACK_REMOTE', action: msg.action, currentTime: msg.currentTime }, '*');
 						}
 					} catch (e) {}
+				} else if (msg.type === 'playback_state') {
+					if (msg.user_id) {
+						playbackStates = {
+							...playbackStates,
+							[msg.user_id]: { playing: !!msg.playing, currentTime: msg.currentTime }
+						};
+					}
 				} else if (msg.type === 'join' || msg.type === 'leave') {
 					connectedUsers = msg.count;
 					syncMessage = `${msg.user} ${msg.type === 'join' ? 'se ha unido' : 'se ha ido'}`;

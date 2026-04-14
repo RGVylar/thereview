@@ -7,10 +7,12 @@
  *     TR_JOIN_SYNC   {sessionId}        — user entered a session page
  *     TR_LEAVE_SYNC  {}                 — user left the session page
  *     TR_PLAYBACK_LOCAL  {payload}      — local video event on media tab
+ *     TR_PLAYBACK_STATE  {payload}      — actual media state on media tab
  *     TR_PLAYBACK_REMOTE {payload}      — remote playback received by frontend
  *     TR_STATUS      {}                 — popup asks for status
  *   background → content-script:
  *     TR_RELAY_TO_PAGE  {payload}       — tell thereview tab to forward to page
+ *     TR_RELAY_STATE_TO_PAGE {payload}  — tell thereview tab the actual media state
  *     TR_PLAYBACK_APPLY {payload}       — tell media tab to control its video
  */
 
@@ -56,6 +58,16 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       if (typeof fromTabId === 'number') {
         chrome.tabs.sendMessage(fromTabId, {
           type: 'TR_RELAY_TO_PAGE',
+          payload: msg.payload,
+        }).catch(() => {});
+      }
+      sendResponse({ ok: true });
+      break;
+
+    case 'TR_PLAYBACK_STATE':
+      if (typeof fromTabId === 'number') {
+        chrome.tabs.sendMessage(fromTabId, {
+          type: 'TR_RELAY_STATE_TO_PAGE',
           payload: msg.payload,
         }).catch(() => {});
       }

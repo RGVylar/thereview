@@ -72,6 +72,8 @@
   chrome.runtime.onMessage.addListener((msg) => {
     if (msg.type === 'TR_RELAY_TO_PAGE') {
       window.postMessage({ type: 'THEREVIEW_PLAYBACK_LOCAL', ...msg.payload }, '*');
+    } else if (msg.type === 'TR_RELAY_STATE_TO_PAGE') {
+      window.postMessage({ type: 'THEREVIEW_PLAYBACK_STATE', ...msg.payload }, '*');
     }
   });
 

@@ -186,6 +186,19 @@ async def session_ws(websocket: WebSocket, session_id: int, token: str = Query(.
                     exclude_uid=user_id,  # don't echo back to sender
                 )
 
+            elif msg_type == "playback_state":
+                await _broadcast(
+                    session_id,
+                    {
+                        "type": "playback_state",
+                        "playing": bool(msg.get("playing", False)),
+                        "currentTime": msg.get("currentTime"),
+                        "user_id": user_id,
+                        "user": display_name,
+                    },
+                    exclude_uid=None,
+                )
+
     except WebSocketDisconnect:
         pass
     finally:
