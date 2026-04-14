@@ -29,6 +29,8 @@
 			if (inviteInterval) clearInterval(inviteInterval);
 		};
 	});
+
+	onMount(() => {
 		let responded = false;
 		let pingInterval = null;
 		let flagCheckInterval = null;
@@ -67,7 +69,6 @@
 			}
 		}
 
-		// Check immediately if flag is already set
 		try {
 			if (window.__THEREVIEW_EXTENSION_INSTALLED === true) {
 				markInstalled('flag already set');
@@ -77,15 +78,12 @@
 			// ignore
 		}
 
-		// Listen for all detection mechanisms
 		window.addEventListener('message', handleMessage, false);
 		window.addEventListener('message', handlePageInjectMessage, false);
 		document.addEventListener('thereview-extension-installed', handleCustomEvent, false);
 
-		// Send immediate ping
 		window.postMessage({ type: 'THEREVIEW_EXTENSION_PING' }, '*');
 
-		// Retry ping every 500ms for up to 3 seconds
 		pingInterval = setInterval(() => {
 			attempts++;
 			console.debug('thereview: ping attempt', attempts);
@@ -99,7 +97,6 @@
 			}
 		}, 500);
 
-		// Poll for the flag every 300ms
 		flagCheckInterval = setInterval(() => {
 			try {
 				if (window.__THEREVIEW_EXTENSION_INSTALLED === true) {
@@ -160,21 +157,6 @@ async function addMeme(event) {
 			// ignore navbar badge errors
 		}
 	}
-
-	$effect(() => {
-		if (!authVal?.token) {
-			pendingInvites = 0;
-			if (inviteInterval) clearInterval(inviteInterval);
-			inviteInterval = null;
-			return;
-		}
-		refreshInviteCount();
-		if (inviteInterval) clearInterval(inviteInterval);
-		inviteInterval = setInterval(refreshInviteCount, 15000);
-		return () => {
-			if (inviteInterval) clearInterval(inviteInterval);
-		};
-	});
 
 </script>
 
