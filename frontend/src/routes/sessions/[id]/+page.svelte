@@ -109,12 +109,15 @@
 				} else if (msg.type === 'play_sync') {
 					mediaPlaying = true;
 				} else if (msg.type === 'playback') {
-					// Relay remote playback command to extension → it will control the video
-					window.postMessage({
-						type: 'THEREVIEW_PLAYBACK_REMOTE',
-						action: msg.action,
-						currentTime: msg.currentTime,
-					}, '*');
+					// Relay remote playback command to the embed iframe (prefer direct postMessage)
+					try {
+						const iframe = document.querySelector('.meme-display iframe');
+						if (iframe?.contentWindow) {
+							iframe.contentWindow.postMessage({ type: 'THEREVIEW_PLAYBACK_REMOTE', action: msg.action, currentTime: msg.currentTime }, '*');
+						} else {
+							window.postMessage({ type: 'THEREVIEW_PLAYBACK_REMOTE', action: msg.action, currentTime: msg.currentTime }, '*');
+						}
+					} catch (e) {}
 				} else if (msg.type === 'join' || msg.type === 'leave') {
 					connectedUsers = msg.count;
 					syncMessage = `${msg.user} ${msg.type === 'join' ? 'se ha unido' : 'se ha ido'}`;
@@ -305,8 +308,17 @@
 
 	function triggerPlaySync() {
 		mediaPlaying = true;
+		const payload = { action: 'play', currentTime: 0 };
+		try {
+			const iframe = document.querySelector('.meme-display iframe');
+			if (iframe?.contentWindow) {
+				iframe.contentWindow.postMessage({ type: 'THEREVIEW_PLAYBACK_REMOTE', ...payload }, '*');
+			} else {
+				window.postMessage({ type: 'THEREVIEW_PLAYBACK_REMOTE', ...payload }, '*');
+			}
+		} catch (e) {}
 		if (ws && ws.readyState === WebSocket.OPEN) {
-			ws.send(JSON.stringify({ type: 'play_sync' }));
+			ws.send(JSON.stringify({ type: 'playback', action: payload.action, currentTime: payload.currentTime }));
 		}
 	}
 

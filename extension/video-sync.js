@@ -83,5 +83,19 @@
     if (target) applyRemote(target, msg.payload);
   });
 
+  // Also accept postMessage from parent thereview page when running inside
+  // an embed iframe: parent can post { type: 'THEREVIEW_PLAYBACK_REMOTE', action, currentTime }
+  window.addEventListener('message', (e) => {
+    try {
+      if (!e?.data) return;
+      if (e.data.type !== 'THEREVIEW_PLAYBACK_REMOTE') return;
+      const videos = Array.from(document.querySelectorAll('video'));
+      const target = videos.find((v) => !v.paused) ?? videos[0];
+      if (target) applyRemote(target, { action: e.data.action, currentTime: e.data.currentTime });
+    } catch (err) {
+      // ignore
+    }
+  });
+
   console.log('[thereview] video-sync.js active on', location.hostname);
 })();
