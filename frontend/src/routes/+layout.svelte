@@ -4,7 +4,6 @@
 	import { api } from '$lib/api.js';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
-	import { onMount } from 'svelte';
 
 	let { children } = $props();
 
@@ -23,85 +22,58 @@
 
 	console.log('[thereview] layout module loaded, authVal:', authVal);
 
-	// --- Extension detection ---
-	onMount(() => {
-		let responded = false;
-		let pingInterval = null;
-		let flagCheckInterval = null;
-		let attempts = 0;
-		const maxAttempts = 6;
+	// --- Extension detection (use $effect instead of onMount in runes mode) ---
+	$effect(() => {
+		let done = false;
 
-		console.log('[thereview] onMount: starting extension detection');
-
-		function cleanup() {
-			window.removeEventListener('message', onMsg);
-			document.removeEventListener('thereview-extension-installed', onCustom);
-			if (pingInterval) clearInterval(pingInterval);
-			if (flagCheckInterval) clearInterval(flagCheckInterval);
+		function detect(v, reason) {
+			if (done) return;
+			done = true;
+			console.log('[thereview] detect called:', v, reason);
+			extInstalled = v;
 		}
 
-		function markInstalled(reason) {
-			console.log('[thereview] EXTENSION DETECTED via:', reason);
-			responded = true;
-			extInstalled = true;
-			console.log('[thereview] extInstalled set to:', extInstalled);
-			cleanup();
-		}
+		console.log('[thereview] $effect running, checking flag immediately:', window?.__THEREVIEW_EXTENSION_INSTALLED);
 
-		function onMsg(e) {
-			console.log('[thereview] window message received:', e?.data);
-			if (e?.data?.type === 'THEREVIEW_EXTENSION_PONG') markInstalled('pong');
-		}
-
-		function onCustom(e) {
-			console.log('[thereview] custom event received:', e?.detail);
-			markInstalled('custom event');
-		}
-
-		// Check if already set by injected script
-		console.log('[thereview] checking window.__THEREVIEW_EXTENSION_INSTALLED:', window.__THEREVIEW_EXTENSION_INSTALLED);
 		try {
 			if (window.__THEREVIEW_EXTENSION_INSTALLED === true) {
-				markInstalled('flag already set');
-				return cleanup;
+				detect(true, 'flag already set');
+				return;
 			}
-		} catch (err) {
-			console.warn('[thereview] error reading flag:', err);
+		} catch (_) {}
+
+		function onMsg(e) {
+			console.log('[thereview] message received:', e?.data?.type);
+			if (e?.data?.type === 'THEREVIEW_EXTENSION_PONG') detect(true, 'pong');
+		}
+		function onEvent(e) {
+			console.log('[thereview] custom event received');
+			detect(true, 'custom event');
 		}
 
 		window.addEventListener('message', onMsg);
-		document.addEventListener('thereview-extension-installed', onCustom);
-		console.log('[thereview] listeners registered, sending first ping');
-
-		// Immediate ping
+		document.addEventListener('thereview-extension-installed', onEvent);
 		window.postMessage({ type: 'THEREVIEW_EXTENSION_PING' }, '*');
 
-		// Retry pings
-		pingInterval = setInterval(() => {
-			attempts++;
-			console.log('[thereview] ping attempt', attempts, '/', maxAttempts, '| responded:', responded);
+		let ticks = 0;
+		const interval = setInterval(() => {
+			ticks++;
+			console.log('[thereview] tick', ticks, '| flag:', window?.__THEREVIEW_EXTENSION_INSTALLED, '| done:', done);
+			try {
+				if (window.__THEREVIEW_EXTENSION_INSTALLED === true) detect(true, 'flag poll');
+			} catch (_) {}
 			window.postMessage({ type: 'THEREVIEW_EXTENSION_PING' }, '*');
-			if (responded || attempts >= maxAttempts) {
-				clearInterval(pingInterval);
-				if (!responded) {
-					console.log('[thereview] no pong after', maxAttempts, 'attempts → extInstalled = false');
-					extInstalled = false;
-				}
+			if (ticks >= 6) {
+				clearInterval(interval);
+				detect(false, 'timeout');
 			}
 		}, 500);
 
-		// Poll for injected flag
-		flagCheckInterval = setInterval(() => {
-			try {
-				const flag = window.__THEREVIEW_EXTENSION_INSTALLED;
-				if (flag === true) {
-					console.log('[thereview] flag poll found flag = true');
-					markInstalled('flag poll');
-				}
-			} catch (_) {}
-		}, 300);
-
-		return cleanup;
+		return () => {
+			window.removeEventListener('message', onMsg);
+			document.removeEventListener('thereview-extension-installed', onEvent);
+			clearInterval(interval);
+		};
 	});
 
 	// --- Invite count polling ---
