@@ -20,7 +20,6 @@
 	let pendingInvites = $state(0);
 	let inviteInterval = null;
 
-	console.log('[thereview] layout module loaded, authVal:', authVal);
 
 	// --- Extension detection (use $effect instead of onMount in runes mode) ---
 	$effect(() => {
@@ -29,11 +28,8 @@
 		function detect(v, reason) {
 			if (done) return;
 			done = true;
-			console.log('[thereview] detect called:', v, reason);
 			extInstalled = v;
 		}
-
-		console.log('[thereview] $effect running, checking flag immediately:', window?.__THEREVIEW_EXTENSION_INSTALLED);
 
 		try {
 			if (window.__THEREVIEW_EXTENSION_INSTALLED === true) {
@@ -43,11 +39,9 @@
 		} catch (_) {}
 
 		function onMsg(e) {
-			console.log('[thereview] message received:', e?.data?.type);
 			if (e?.data?.type === 'THEREVIEW_EXTENSION_PONG') detect(true, 'pong');
 		}
 		function onEvent(e) {
-			console.log('[thereview] custom event received');
 			detect(true, 'custom event');
 		}
 
@@ -58,7 +52,6 @@
 		let ticks = 0;
 		const interval = setInterval(() => {
 			ticks++;
-			console.log('[thereview] tick', ticks, '| flag:', window?.__THEREVIEW_EXTENSION_INSTALLED, '| done:', done);
 			try {
 				if (window.__THEREVIEW_EXTENSION_INSTALLED === true) detect(true, 'flag poll');
 			} catch (_) {}

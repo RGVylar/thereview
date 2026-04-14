@@ -96,6 +96,4 @@
       // ignore
     }
   });
-
-  console.log('[thereview] video-sync.js active on', location.hostname);
 })();

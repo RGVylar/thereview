@@ -20,14 +20,12 @@
 let therereviewTabId = null;
 
 chrome.runtime.onInstalled.addListener(() => {
-  console.log('[thereview] extension installed / updated');
 });
 
 // Clean up when the thereview tab is closed
 chrome.tabs.onRemoved.addListener((tabId) => {
   if (tabId === therereviewTabId) {
     therereviewTabId = null;
-    console.log('[thereview] thereview tab closed — sync detached');
   }
 });
 
@@ -39,14 +37,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     // ── Frontend joined a session ────────────────────────────────────────────
     case 'TR_JOIN_SYNC':
       therereviewTabId = fromTabId;
-      console.log('[thereview] sync joined session', msg.sessionId, '| tab', fromTabId);
       sendResponse({ ok: true });
       break;
 
     // ── Frontend left the session ────────────────────────────────────────────
     case 'TR_LEAVE_SYNC':
       if (fromTabId === therereviewTabId) therereviewTabId = null;
-      console.log('[thereview] sync left session');
       sendResponse({ ok: true });
       break;
 

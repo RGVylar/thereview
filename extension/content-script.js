@@ -1,6 +1,5 @@
 // Simple content script that listens for a page ping and replies so the page can detect
 (function () {
-  console.debug('thereview extension content-script injected at document_start');
 
   // Inject page-inject.js as early as possible
   function injectPageFlag() {
@@ -8,7 +7,6 @@
       const s = document.createElement('script');
       s.src = chrome.runtime.getURL('page-inject.js');
       s.onload = () => {
-        console.debug('thereview: page-inject.js loaded and executed');
         s.remove();
       };
       s.onerror = () => {
@@ -38,7 +36,6 @@
     if (!e?.data) return;
     try {
       if (e.data.type === 'THEREVIEW_EXTENSION_PING') {
-        console.debug('thereview: received PING, sending PONG');
         window.postMessage({ type: 'THEREVIEW_EXTENSION_PONG', version: '0.1.0' }, '*');
       }
     } catch (err) {
@@ -84,7 +81,6 @@
     meta.name = 'thereview-extension';
     meta.content = 'installed';
     document.documentElement.appendChild(meta);
-    console.debug('thereview: meta tag added');
   } catch (e) {
     console.warn('thereview: cannot append meta', e);
   }
