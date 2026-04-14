@@ -21,6 +21,8 @@
 	let pendingInvites = $state(0);
 	let inviteInterval = null;
 
+	console.log('[thereview] layout module loaded, authVal:', authVal);
+
 	// --- Extension detection ---
 	onMount(() => {
 		let responded = false;
