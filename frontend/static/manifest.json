@@ -6,5 +6,11 @@
 	"background_color": "#1a1a2e",
 	"theme_color": "#1a1a2e",
 	"description": "Meme review sessions with friends",
-	"icons": []
+	"icons": [
+		{
+			"src": "/logo.png",
+			"sizes": "64x64",
+			"type": "image/png"
+		}
+	]
 }
