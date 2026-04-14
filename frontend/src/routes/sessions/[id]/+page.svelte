@@ -36,6 +36,11 @@
 	// Ready system (PENDING state)
 	let readyUserIds = $state([]);
 
+	// Per-user playback state keyed by user_id: { playing: bool }
+	let playbackStates = $state({});
+	// True when the local embed's autoplay was blocked — shows a hint to the user
+	let playBlocked = $state(false);
+
 	function startTimer(startedAt) {
 		if (timerInterval) clearInterval(timerInterval);
 		if (!startedAt) return;
@@ -73,6 +78,12 @@
 					action: e.data.action,
 					currentTime: e.data.currentTime,
 				}));
+				// Update own state locally (WS broadcast excludes sender)
+				const uid = authVal.user?.id;
+				if (uid) {
+					playbackStates = { ...playbackStates, [uid]: { playing: e.data.action === 'play' } };
+					if (e.data.action === 'play') playBlocked = false;
+				}
 			};
 			window.addEventListener('message', extPlaybackHandler);
 		};
@@ -84,6 +95,8 @@
 					loadSession();
 				} else if (msg.type === 'navigate') {
 					currentIndex = msg.index;
+					playbackStates = {};
+					playBlocked = false;
 				} else if (msg.type === 'vote') {
 					// Update local votes from remote
 					votes = votes.filter(
@@ -104,9 +117,13 @@
 						readyUserIds = [...readyUserIds, msg.user_id];
 					}
 				} else if (msg.type === 'play_sync') {
-					mediaPlaying = true;
+					// legacy — absorbed by playback system
 				} else if (msg.type === 'playback') {
-					// Relay remote playback command to the embed iframe (prefer direct postMessage)
+					// Track remote user playback state
+					if (msg.user_id) {
+						playbackStates = { ...playbackStates, [msg.user_id]: { playing: msg.action === 'play' } };
+					}
+					// Relay remote playback command to the embed iframe
 					try {
 						const iframe = document.querySelector('.meme-display iframe');
 						if (iframe?.contentWindow) {
@@ -272,6 +289,8 @@
 	function prev() {
 		if (currentIndex > 0) {
 			currentIndex--;
+			playbackStates = {};
+			playBlocked = false;
 			if (ws && ws.readyState === WebSocket.OPEN) {
 				ws.send(JSON.stringify({ type: 'navigate', index: currentIndex }));
 			}
@@ -281,6 +300,8 @@
 	function next() {
 		if (currentIndex < session.session_memes.length - 1) {
 			currentIndex++;
+			playbackStates = {};
+			playBlocked = false;
 			if (ws && ws.readyState === WebSocket.OPEN) {
 				ws.send(JSON.stringify({ type: 'navigate', index: currentIndex }));
 			}
@@ -337,6 +358,15 @@
 		}, 600);
 		return () => clearTimeout(t);
 	});
+
+	// Listen for autoplay-blocked signal posted from embed iframe via video-sync.js
+	$effect(() => {
+		function onBlockedMsg(e) {
+			if (e.data?.type === 'THEREVIEW_PLAY_BLOCKED') playBlocked = true;
+		}
+		window.addEventListener('message', onBlockedMsg);
+		return () => window.removeEventListener('message', onBlockedMsg);
+	});
 </script>
 
 <div class="container">
@@ -350,7 +380,11 @@
 			<div class="header-meta">
 				<div class="participants">
 					{#each session.participants as p}
-						<span class="chip">{p.display_name}</span>
+						{@const pbs = playbackStates[p.id]}
+						<span class="chip">
+							{#if pbs?.playing}<span title="Reproduciendo">🟢</span>{:else if pbs}<span title="Pausado">⏸</span>{/if}
+							{p.display_name}
+						</span>
 					{/each}
 				</div>
 				{#if session.status === 'active'}
@@ -358,8 +392,9 @@
 						<span class="timer">⏱️ {elapsed}</span>
 						<span class="connected">🟢 {connectedUsers} online</span>
 					</div>
-				{/if}
-				{#if syncMessage}
+				{/if}					{#if playBlocked}
+						<p class="play-blocked-hint">▶ Pulsa Play en el video para sincronizarte con el grupo</p>
+					{/if}				{#if syncMessage}
 					<p class="sync-toast">{syncMessage}</p>
 				{/if}
 			</div>
@@ -843,5 +878,14 @@
 	.sync-media-wrap {
 		position: relative;
 		width: 100%;
+	}
+	.play-blocked-hint {
+		font-size: 0.82rem;
+		color: var(--accent);
+		text-align: center;
+		padding: 0.3rem 0.6rem;
+		border-radius: 6px;
+		background: rgba(255, 100, 60, 0.1);
+		animation: fadeIn 0.3s;
 	}
 </style>

@@ -180,6 +180,7 @@ async def session_ws(websocket: WebSocket, session_id: int, token: str = Query(.
                         "type": "playback",
                         "action": msg.get("action"),       # "play" | "pause" | "seek"
                         "currentTime": msg.get("currentTime"),
+                        "user_id": user_id,
                         "user": display_name,
                     },
                     exclude_uid=user_id,  # don't echo back to sender
