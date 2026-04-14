@@ -22,6 +22,7 @@
 	let extInstalled = null;
 
 	onMount(() => {
+
 		let responded = false;
 
 		function handleMessage(e) {
@@ -34,13 +35,26 @@
 		}
 
 		window.addEventListener('message', handleMessage);
-		// Enviar ping a la extensión (si existe) desde la página
+
+		// Reintentar ping varias veces (hasta ~3s) por si la inyección del content-script tarda
+		let attempts = 0;
+		const maxAttempts = 6;
+		const pingInterval = setInterval(() => {
+			attempts++;
+			window.postMessage({ type: 'THEREVIEW_EXTENSION_PING' }, '*');
+			if (responded || attempts >= maxAttempts) {
+				clearInterval(pingInterval);
+				if (!responded) extInstalled = false;
+			}
+		}, 500);
+
+		// enviar un ping inmediato
 		window.postMessage({ type: 'THEREVIEW_EXTENSION_PING' }, '*');
 
-		// Timeout corto para asumir que no está instalada
-		setTimeout(() => {
-			if (!responded) extInstalled = false;
-		}, 700);
+		return () => {
+			window.removeEventListener('message', handleMessage);
+			clearInterval(pingInterval);
+		};
 	});
  
 async function addMeme(event) {

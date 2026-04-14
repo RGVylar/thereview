@@ -1,5 +1,7 @@
 // Simple content script that listens for a page ping and replies so the page can detect
 (function () {
+  console.debug('thereview extension content-script injected');
+
   function onMessage(e) {
     if (!e || !e.data) return;
     try {

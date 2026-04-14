@@ -9,7 +9,12 @@
     "*://*.twitter.com/*",
     "*://twitter.com/*",
     "*://*.x.com/*",
-    "*://*.youtube.com/*"
+    "*://*.youtube.com/*",
+    "http://localhost/*",
+    "http://127.0.0.1/*",
+    "http://localhost:5173/*",
+    "http://127.0.0.1:5173/*",
+    "http://192.168.1.178/*"
   ],
   "action": {
     "default_popup": "popup.html"
@@ -21,7 +26,12 @@
         "*://*.twitter.com/*",
         "*://twitter.com/*",
         "*://x.com/*",
-        "*://*.youtube.com/*"
+        "*://*.youtube.com/*",
+        "http://localhost/*",
+        "http://127.0.0.1/*",
+        "http://localhost:5173/*",
+        "http://127.0.0.1:5173/*",
+        "http://192.168.1.178/*"
       ],
       "js": ["content-script.js"],
       "run_at": "document_idle"
