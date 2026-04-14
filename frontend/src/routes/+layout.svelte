@@ -121,7 +121,6 @@ async function addMeme(event) {
 	});
 
 </script>
-</script>
 
 {#if authVal?.token}
 	<nav class="navbar">
