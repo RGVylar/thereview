@@ -7,7 +7,7 @@ chrome.runtime.sendMessage({ type: 'TR_STATUS' }, (res) => {
     return;
   }
   if (res.connected) {
-    statusEl.innerHTML = `✅ <strong>Sincronizado</strong> — sesión ${res.sessionId}`;
+    statusEl.innerHTML = `✅ <strong>Sincronizado</strong> — ${res.tabCount} pestaña(s) activa(s)`;
     statusEl.style.background = '#e5ffe9';
   } else {
     statusEl.textContent = '🔴 Sin sesión activa. Abre una sesión en The Review.';

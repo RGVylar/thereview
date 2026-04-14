@@ -16,17 +16,15 @@
 
 'use strict';
 
-// Tab ID of the thereview frontend tab currently in a sync session
-let therereviewTabId = null;
+// Track tabs that currently have an active thereview session page.
+const syncTabs = new Set();
 
 chrome.runtime.onInstalled.addListener(() => {
 });
 
 // Clean up when the thereview tab is closed
 chrome.tabs.onRemoved.addListener((tabId) => {
-  if (tabId === therereviewTabId) {
-    therereviewTabId = null;
-  }
+  syncTabs.delete(tabId);
 });
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
@@ -36,21 +34,27 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
     // ── Frontend joined a session ────────────────────────────────────────────
     case 'TR_JOIN_SYNC':
-      therereviewTabId = fromTabId;
+      if (typeof fromTabId === 'number') {
+        syncTabs.add(fromTabId);
+      }
       sendResponse({ ok: true });
       break;
 
     // ── Frontend left the session ────────────────────────────────────────────
     case 'TR_LEAVE_SYNC':
-      if (fromTabId === therereviewTabId) therereviewTabId = null;
+      if (typeof fromTabId === 'number') {
+        syncTabs.delete(fromTabId);
+      }
       sendResponse({ ok: true });
       break;
 
     // ── Local video event (play/pause/seek on TikTok/Twitter) ───────────────
     // video-sync.js → background → thereview tab → frontend → WS → backend
     case 'TR_PLAYBACK_LOCAL':
-      if (therereviewTabId) {
-        chrome.tabs.sendMessage(therereviewTabId, {
+      // Route local media events back to the same tab that produced them.
+      // This avoids cross-user hijacking when multiple thereview tabs are open.
+      if (typeof fromTabId === 'number') {
+        chrome.tabs.sendMessage(fromTabId, {
           type: 'TR_RELAY_TO_PAGE',
           payload: msg.payload,
         }).catch(() => {});
@@ -61,21 +65,20 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     // ── Remote playback event (from backend via frontend) ───────────────────
     // content-script on thereview tab → background → all media tabs
     case 'TR_PLAYBACK_REMOTE':
-      chrome.tabs.query({}, (tabs) => {
-        for (const tab of tabs) {
-          if (tab.id === therereviewTabId) continue; // skip thereview tab itself
-          chrome.tabs.sendMessage(tab.id, {
-            type: 'TR_PLAYBACK_APPLY',
-            payload: msg.payload,
-          }).catch(() => {}); // silently skip tabs without content script
-        }
-      });
+      // Apply remote playback only inside the same thereview tab that
+      // received the websocket event (its embed iframe lives in this tab).
+      if (typeof fromTabId === 'number') {
+        chrome.tabs.sendMessage(fromTabId, {
+          type: 'TR_PLAYBACK_APPLY',
+          payload: msg.payload,
+        }).catch(() => {});
+      }
       sendResponse({ ok: true });
       break;
 
     // ── Status query (popup) ─────────────────────────────────────────────────
     case 'TR_STATUS':
-      sendResponse({ connected: therereviewTabId !== null, tabId: therereviewTabId });
+      sendResponse({ connected: syncTabs.size > 0, tabCount: syncTabs.size });
       break;
 
     default:

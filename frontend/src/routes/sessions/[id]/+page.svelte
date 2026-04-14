@@ -36,9 +36,6 @@
 	// Ready system (PENDING state)
 	let readyUserIds = $state([]);
 
-	// Synchronized reveal for media players that don't autoplay reliably
-	let mediaPlaying = $state(false);
-
 	function startTimer(startedAt) {
 		if (timerInterval) clearInterval(timerInterval);
 		if (!startedAt) return;
@@ -307,7 +304,6 @@
 	}
 
 	function triggerPlaySync() {
-		mediaPlaying = true;
 		const payload = { action: 'play', currentTime: 0 };
 		try {
 			const iframe = document.querySelector('.meme-display iframe');
@@ -326,10 +322,20 @@
 		return embedType === 'tiktok' || embedType === 'twitter';
 	}
 
-	// Reset synchronized overlay when navigating to a new meme
+	// Auto-sync playable embeds when a new meme is shown.
+	// Only the session creator emits the WS command to avoid feedback storms.
 	$effect(() => {
-		const _ = currentIndex;
-		mediaPlaying = false;
+		const sm = session?.session_memes?.[currentIndex];
+		if (!sm) return;
+		const embed = detectEmbed(sm.meme.url);
+		if (!isSyncMedia(embed.type)) return;
+		if (session?.created_by !== authVal.user?.id) return;
+		if (!ws || ws.readyState !== WebSocket.OPEN) return;
+
+		const t = setTimeout(() => {
+			triggerPlaySync();
+		}, 600);
+		return () => clearTimeout(t);
 	});
 </script>
 
@@ -434,13 +440,6 @@
 									allowfullscreen
 									class="embed-frame tiktok-frame"
 								></iframe>
-								{#if !mediaPlaying}
-									<button class="media-sync-overlay" onclick={triggerPlaySync}>
-										<span class="play-icon">▶</span>
-										<span>Ver juntos</span>
-										<span class="play-hint">Pulsa para mostrar a la vez</span>
-									</button>
-								{/if}
 							</div>
 						{:else if embed.type === 'instagram' && embed.embedUrl}
 							<iframe
@@ -465,13 +464,6 @@
 									<div class="twitter-embed">
 										<p class="tweet-hint">Cargando tweet…</p>
 									</div>
-								{/if}
-								{#if isSyncMedia(embed.type) && !mediaPlaying}
-									<button class="media-sync-overlay" onclick={triggerPlaySync}>
-										<span class="play-icon">▶</span>
-										<span>Ver juntos</span>
-										<span class="play-hint">Pulsa para mostrar a la vez</span>
-									</button>
 								{/if}
 							</div>
 						{:else if embed.type === 'image'}
@@ -847,36 +839,9 @@
 		margin-top: 0.75rem;
 	}
 
-	/* Shared sync overlay for TikTok/Twitter */
+	/* Shared wrapper for sync-capable embeds */
 	.sync-media-wrap {
 		position: relative;
 		width: 100%;
-	}
-	.media-sync-overlay {
-		position: absolute;
-		inset: 0;
-		background: rgba(0, 0, 0, 0.72);
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		justify-content: center;
-		gap: 0.4rem;
-		border: none;
-		cursor: pointer;
-		border-radius: 8px;
-		color: #fff;
-		transition: background 0.2s;
-		z-index: 2;
-	}
-	.media-sync-overlay:hover {
-		background: rgba(0, 0, 0, 0.5);
-	}
-	.play-icon {
-		font-size: 3rem;
-		line-height: 1;
-	}
-	.play-hint {
-		font-size: 0.75rem;
-		opacity: 0.65;
 	}
 </style>
