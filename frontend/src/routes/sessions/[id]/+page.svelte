@@ -38,8 +38,18 @@
 
 	// Per-user playback state keyed by user_id: { playing: bool }
 	let playbackStates = $state({});
-	// True when the local embed's autoplay was blocked — shows a hint to the user
-	let playBlocked = $state(false);
+
+	// True when someone else is playing but the local user isn't yet.
+	// Based purely on received WS events — no reliance on browser error signals.
+	let outOfSync = $derived.by(() => {
+		const myId = authVal.user?.id;
+		if (!myId) return false;
+		const myPlaying = playbackStates[myId]?.playing ?? false;
+		if (myPlaying) return false;
+		return Object.entries(playbackStates).some(
+			([uid, s]) => Number(uid) !== myId && s.playing
+		);
+	});
 
 	function startTimer(startedAt) {
 		if (timerInterval) clearInterval(timerInterval);
@@ -82,7 +92,6 @@
 				const uid = authVal.user?.id;
 				if (uid) {
 					playbackStates = { ...playbackStates, [uid]: { playing: e.data.action === 'play' } };
-					if (e.data.action === 'play') playBlocked = false;
 				}
 			};
 			window.addEventListener('message', extPlaybackHandler);
@@ -96,7 +105,6 @@
 				} else if (msg.type === 'navigate') {
 					currentIndex = msg.index;
 					playbackStates = {};
-					playBlocked = false;
 				} else if (msg.type === 'vote') {
 					// Update local votes from remote
 					votes = votes.filter(
@@ -290,7 +298,6 @@
 		if (currentIndex > 0) {
 			currentIndex--;
 			playbackStates = {};
-			playBlocked = false;
 			if (ws && ws.readyState === WebSocket.OPEN) {
 				ws.send(JSON.stringify({ type: 'navigate', index: currentIndex }));
 			}
@@ -301,7 +308,6 @@
 		if (currentIndex < session.session_memes.length - 1) {
 			currentIndex++;
 			playbackStates = {};
-			playBlocked = false;
 			if (ws && ws.readyState === WebSocket.OPEN) {
 				ws.send(JSON.stringify({ type: 'navigate', index: currentIndex }));
 			}
@@ -343,30 +349,6 @@
 		return embedType === 'tiktok' || embedType === 'twitter';
 	}
 
-	// Auto-sync playable embeds when a new meme is shown.
-	// Only the session creator emits the WS command to avoid feedback storms.
-	$effect(() => {
-		const sm = session?.session_memes?.[currentIndex];
-		if (!sm) return;
-		const embed = detectEmbed(sm.meme.url);
-		if (!isSyncMedia(embed.type)) return;
-		if (session?.created_by !== authVal.user?.id) return;
-		if (!ws || ws.readyState !== WebSocket.OPEN) return;
-
-		const t = setTimeout(() => {
-			triggerPlaySync();
-		}, 600);
-		return () => clearTimeout(t);
-	});
-
-	// Listen for autoplay-blocked signal posted from embed iframe via video-sync.js
-	$effect(() => {
-		function onBlockedMsg(e) {
-			if (e.data?.type === 'THEREVIEW_PLAY_BLOCKED') playBlocked = true;
-		}
-		window.addEventListener('message', onBlockedMsg);
-		return () => window.removeEventListener('message', onBlockedMsg);
-	});
 </script>
 
 <div class="container">
@@ -392,8 +374,8 @@
 						<span class="timer">⏱️ {elapsed}</span>
 						<span class="connected">🟢 {connectedUsers} online</span>
 					</div>
-				{/if}					{#if playBlocked}
-						<p class="play-blocked-hint">▶ Pulsa Play en el video para sincronizarte con el grupo</p>
+				{/if}					{#if outOfSync}
+						<p class="out-of-sync-hint">▶ Pulsa Play en el player para unirte al grupo</p>
 					{/if}				{#if syncMessage}
 					<p class="sync-toast">{syncMessage}</p>
 				{/if}
@@ -879,7 +861,7 @@
 		position: relative;
 		width: 100%;
 	}
-	.play-blocked-hint {
+	.out-of-sync-hint {
 		font-size: 0.82rem;
 		color: var(--accent);
 		text-align: center;

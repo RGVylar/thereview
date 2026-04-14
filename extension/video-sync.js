@@ -33,11 +33,7 @@
         }
       }
       if (action === 'play') {
-        video.play().catch(() => {
-          // Autoplay was blocked by browser policy — tell parent to show a hint
-          try { window.parent.postMessage({ type: 'THEREVIEW_PLAY_BLOCKED' }, '*'); } catch (_) {}
-          try { window.postMessage({ type: 'THEREVIEW_PLAY_BLOCKED' }, '*'); } catch (_) {}
-        });
+        video.play().catch(() => {});
       } else if (action === 'pause') {
         video.pause();
       }
