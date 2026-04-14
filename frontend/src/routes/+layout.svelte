@@ -8,6 +8,12 @@
 
 	let { children } = $props();
 
+	// Subscribe to stores the same way other pages do
+	let authVal = $state(null);
+	let pageVal = $state(null);
+	auth.subscribe((v) => (authVal = v));
+	page.subscribe((v) => (pageVal = v));
+
 	let extInstalled = $state(null); // null = detecting, true = installed, false = not installed
 	let newUrl = $state('');
 	let adding = $state(false);
@@ -15,8 +21,73 @@
 	let pendingInvites = $state(0);
 	let inviteInterval = null;
 
+	// --- Extension detection ---
+	onMount(() => {
+		let responded = false;
+		let pingInterval = null;
+		let flagCheckInterval = null;
+		let attempts = 0;
+		const maxAttempts = 6;
+
+		function cleanup() {
+			window.removeEventListener('message', onMsg);
+			document.removeEventListener('thereview-extension-installed', onCustom);
+			if (pingInterval) clearInterval(pingInterval);
+			if (flagCheckInterval) clearInterval(flagCheckInterval);
+		}
+
+		function markInstalled(reason) {
+			console.debug('thereview: extension detected -', reason);
+			responded = true;
+			extInstalled = true;
+			cleanup();
+		}
+
+		function onMsg(e) {
+			if (e?.data?.type === 'THEREVIEW_EXTENSION_PONG') markInstalled('pong');
+		}
+
+		function onCustom() {
+			markInstalled('custom event');
+		}
+
+		// Check if already set by injected script
+		try {
+			if (window.__THEREVIEW_EXTENSION_INSTALLED === true) {
+				markInstalled('flag already set');
+				return cleanup;
+			}
+		} catch (_) {}
+
+		window.addEventListener('message', onMsg);
+		document.addEventListener('thereview-extension-installed', onCustom);
+
+		// Immediate ping
+		window.postMessage({ type: 'THEREVIEW_EXTENSION_PING' }, '*');
+
+		// Retry pings
+		pingInterval = setInterval(() => {
+			attempts++;
+			window.postMessage({ type: 'THEREVIEW_EXTENSION_PING' }, '*');
+			if (responded || attempts >= maxAttempts) {
+				clearInterval(pingInterval);
+				if (!responded) extInstalled = false;
+			}
+		}, 500);
+
+		// Poll for injected flag
+		flagCheckInterval = setInterval(() => {
+			try {
+				if (window.__THEREVIEW_EXTENSION_INSTALLED === true) markInstalled('flag poll');
+			} catch (_) {}
+		}, 300);
+
+		return cleanup;
+	});
+
+	// --- Invite count polling ---
 	$effect(() => {
-		if (!$auth?.token) {
+		if (!authVal?.token) {
 			pendingInvites = 0;
 			if (inviteInterval) clearInterval(inviteInterval);
 			inviteInterval = null;
@@ -30,140 +101,56 @@
 		};
 	});
 
-	onMount(() => {
-		let responded = false;
-		let pingInterval = null;
-		let flagCheckInterval = null;
-		let attempts = 0;
-		const maxAttempts = 6;
-
-		function cleanupListeners() {
-			window.removeEventListener('message', handleMessage);
-			document.removeEventListener('thereview-extension-installed', handleCustomEvent);
-			window.removeEventListener('message', handlePageInjectMessage);
-			if (pingInterval) clearInterval(pingInterval);
-			if (flagCheckInterval) clearInterval(flagCheckInterval);
-		}
-
-		function markInstalled(reason) {
-			console.debug('thereview: extension detected -', reason);
-			responded = true;
-			extInstalled = true;
-			cleanupListeners();
-		}
-
-		function handleMessage(e) {
-			if (!e?.data || e.data.type !== 'THEREVIEW_EXTENSION_PONG') return;
-			markInstalled('pong message');
-		}
-
-		function handleCustomEvent(e) {
-			console.debug('thereview: custom event received', e?.detail);
-			markInstalled('custom event');
-		}
-
-		function handlePageInjectMessage(e) {
-			if (!e?.data) return;
-			if (e.data.type === 'THEREVIEW_EXTENSION_PONG') {
-				markInstalled('page-inject pong');
-			}
-		}
-
+	async function refreshInviteCount() {
+		if (!authVal?.token) return;
 		try {
-			if (window.__THEREVIEW_EXTENSION_INSTALLED === true) {
-				markInstalled('flag already set');
-				return;
-			}
-		} catch (err) {
+			const sessions = await api('/api/sessions', { token: authVal.token });
+			pendingInvites = sessions.filter(
+				(s) => s.status === 'pending' && s.created_by !== authVal.user?.id
+			).length;
+		} catch {
 			// ignore
 		}
-
-		window.addEventListener('message', handleMessage, false);
-		window.addEventListener('message', handlePageInjectMessage, false);
-		document.addEventListener('thereview-extension-installed', handleCustomEvent, false);
-
-		window.postMessage({ type: 'THEREVIEW_EXTENSION_PING' }, '*');
-
-		pingInterval = setInterval(() => {
-			attempts++;
-			console.debug('thereview: ping attempt', attempts);
-			window.postMessage({ type: 'THEREVIEW_EXTENSION_PING' }, '*');
-			if (responded || attempts >= maxAttempts) {
-				clearInterval(pingInterval);
-				if (!responded) {
-					console.debug('thereview: no pong received, marking as not installed');
-					extInstalled = false;
-				}
-			}
-		}, 500);
-
-		flagCheckInterval = setInterval(() => {
-			try {
-				if (window.__THEREVIEW_EXTENSION_INSTALLED === true) {
-					markInstalled('flag poll detected');
-				}
-			} catch (err) {
-				// ignore
-			}
-		}, 300);
-
-		return cleanupListeners;
-	});
- 
-async function addMeme(event) {
-	event.preventDefault();
-	addError = '';
-	if (!newUrl || !newUrl.trim()) {
-		addError = 'Introduce una URL';
-		return;
 	}
-	adding = true;
-	try {
-		await api('/api/memes', {
-			method: 'POST',
-			body: { url: newUrl.trim() },
-			token: $auth.token,
-		});
-		newUrl = '';
-		// Navigate to profile so user can see the embed immediately
-		goto('/profile');
-	} catch (err) {
-		addError = err?.message || String(err);
-	} finally {
-		adding = false;
+
+	async function addMeme(event) {
+		event.preventDefault();
+		addError = '';
+		if (!newUrl || !newUrl.trim()) { addError = 'Introduce una URL'; return; }
+		adding = true;
+		try {
+			await api('/api/memes', {
+				method: 'POST',
+				body: { url: newUrl.trim() },
+				token: authVal.token,
+			});
+			newUrl = '';
+			goto('/profile');
+		} catch (err) {
+			addError = err?.message || String(err);
+		} finally {
+			adding = false;
+		}
 	}
-}
+
 	function logout() {
 		auth.logout();
 		goto('/login');
 	}
 
 	function showInstallInstructions() {
-		alert('Para probar la extensión en Brave:\n1) Abre brave://extensions\n2) Activa "Developer mode"\n3) Pulsa "Load unpacked" y selecciona la carpeta "extension" en el repositorio.');
+		alert('Para probar la extensión en Brave:\n1) Abre brave://extensions\n2) Activa "Developer mode"\n3) Pulsa "Load unpacked" y selecciona la carpeta "extension" del repositorio.');
 	}
 
 	function isActive(path) {
-		return $page?.url?.pathname?.startsWith(path);
+		return pageVal?.url?.pathname?.startsWith(path);
 	}
-
-	async function refreshInviteCount() {
-		if (!$auth?.token) return;
-		try {
-			const sessions = await api('/api/sessions', { token: $auth.token });
-			pendingInvites = sessions.filter(
-				(s) => s.status === 'pending' && s.created_by !== $auth.user?.id
-			).length;
-		} catch {
-			// ignore navbar badge errors
-		}
-	}
-
 </script>
 
-{#if $auth?.token}
+{#if authVal?.token}
 	<nav class="navbar">
 		<a href="/" class="brand">🍿 The Review</a>
-			<div class="nav-add">
+		<div class="nav-add">
 			<form onsubmit={addMeme} class="nav-add-form">
 				<input bind:value={newUrl} placeholder="Pega la URL del meme" />
 				<button class="btn-primary" type="submit" disabled={adding}>{adding ? 'Añadiendo...' : 'Añadir'}</button>
@@ -178,12 +165,12 @@ async function addMeme(event) {
 					<span class="invite-badge">{pendingInvites}</span>
 				{/if}
 			</a>
-			<span class="nav-user">👤 {$auth.user?.display_name}</span>
+			<span class="nav-user">👤 {authVal.user?.display_name}</span>
 			<button class="btn-ghost" onclick={logout}>Salir</button>
 			{#if extInstalled === true}
 				<span class="ext-status ext-connected" title="Extensión instalada">🔌 Extensión activa</span>
 			{:else if extInstalled === null}
-				<span class="ext-status ext-pending" title="Detectando extensión"><span class="dot"></span> Detectando extensión…</span>
+				<span class="ext-status ext-pending" title="Detectando extensión"><span class="dot"></span> Detectando…</span>
 			{/if}
 		</div>
 	</nav>
