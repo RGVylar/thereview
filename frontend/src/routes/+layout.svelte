@@ -6,87 +6,92 @@
 	import { page } from '$app/stores';
 	import { onMount } from 'svelte';
 
+	let extInstalled = null; // null = detecting, true = installed, false = not installed
 
-		onMount(() => {
-			let responded = false;
-			let pingInterval = null;
-			let flagCheckInterval = null;
-			let attempts = 0;
-			const maxAttempts = 6;
+	onMount(() => {
+		let responded = false;
+		let pingInterval = null;
+		let flagCheckInterval = null;
+		let attempts = 0;
+		const maxAttempts = 6;
 
-			function handleMessage(e) {
-				console.debug('thereview: message received', e?.data, 'origin', e?.origin);
-				const data = e?.data;
-				if (!data) return;
-				if (data.type === 'THEREVIEW_EXTENSION_PONG') {
-					responded = true;
-					extInstalled = true;
-					window.removeEventListener('message', handleMessage);
+		function cleanupListeners() {
+			window.removeEventListener('message', handleMessage);
+			document.removeEventListener('thereview-extension-installed', handleCustomEvent);
+			window.removeEventListener('message', handlePageInjectMessage);
+			if (pingInterval) clearInterval(pingInterval);
+			if (flagCheckInterval) clearInterval(flagCheckInterval);
+		}
+
+		function markInstalled(reason) {
+			console.debug('thereview: extension detected -', reason);
+			responded = true;
+			extInstalled = true;
+			cleanupListeners();
+		}
+
+		function handleMessage(e) {
+			if (!e?.data || e.data.type !== 'THEREVIEW_EXTENSION_PONG') return;
+			markInstalled('pong message');
+		}
+
+		function handleCustomEvent(e) {
+			console.debug('thereview: custom event received', e?.detail);
+			markInstalled('custom event');
+		}
+
+		function handlePageInjectMessage(e) {
+			if (!e?.data) return;
+			if (e.data.type === 'THEREVIEW_EXTENSION_PONG') {
+				markInstalled('page-inject pong');
+			}
+		}
+
+		// Check immediately if flag is already set
+		try {
+			if (window.__THEREVIEW_EXTENSION_INSTALLED === true) {
+				markInstalled('flag already set');
+				return;
+			}
+		} catch (err) {
+			// ignore
+		}
+
+		// Listen for all detection mechanisms
+		window.addEventListener('message', handleMessage, false);
+		window.addEventListener('message', handlePageInjectMessage, false);
+		document.addEventListener('thereview-extension-installed', handleCustomEvent, false);
+
+		// Send immediate ping
+		window.postMessage({ type: 'THEREVIEW_EXTENSION_PING' }, '*');
+
+		// Retry ping every 500ms for up to 3 seconds
+		pingInterval = setInterval(() => {
+			attempts++;
+			console.debug('thereview: ping attempt', attempts);
+			window.postMessage({ type: 'THEREVIEW_EXTENSION_PING' }, '*');
+			if (responded || attempts >= maxAttempts) {
+				clearInterval(pingInterval);
+				if (!responded) {
+					console.debug('thereview: no pong received, marking as not installed');
+					extInstalled = false;
 				}
 			}
+		}, 500);
 
-			function handleCustomEvent(e) {
-				console.debug('thereview: custom event received', e?.detail);
-				responded = true;
-				extInstalled = true;
-				window.removeEventListener('message', handleMessage);
-				document.removeEventListener('thereview-extension-installed', handleCustomEvent);
-				if (pingInterval) clearInterval(pingInterval);
-				if (flagCheckInterval) clearInterval(flagCheckInterval);
-			}
-
-			window.addEventListener('message', handleMessage);
-			document.addEventListener('thereview-extension-installed', handleCustomEvent);
-
-			// Fallback rápido: si el script inyectado en la página expone la bandera, marcar como instalado
+		// Poll for the flag every 300ms
+		flagCheckInterval = setInterval(() => {
 			try {
-				if (window.__THEREVIEW_EXTENSION_INSTALLED) {
-					responded = true;
-					extInstalled = true;
-					window.removeEventListener('message', handleMessage);
-					document.removeEventListener('thereview-extension-installed', handleCustomEvent);
-					return;
+				if (window.__THEREVIEW_EXTENSION_INSTALLED === true) {
+					markInstalled('flag poll detected');
 				}
 			} catch (err) {
 				// ignore
 			}
+		}, 300);
 
-			// enviar un ping inmediato
-			window.postMessage({ type: 'THEREVIEW_EXTENSION_PING' }, '*');
-
-			// Reintentar ping varias veces (hasta ~3s) por si la inyección del content-script tarda
-			pingInterval = setInterval(() => {
-				attempts++;
-				window.postMessage({ type: 'THEREVIEW_EXTENSION_PING' }, '*');
-				if (responded || attempts >= maxAttempts) {
-					clearInterval(pingInterval);
-					if (!responded) extInstalled = false;
-				}
-			}, 500);
-
-			// Poll for the injected page flag in case it appears after mount
-			flagCheckInterval = setInterval(() => {
-				try {
-					if (window.__THEREVIEW_EXTENSION_INSTALLED) {
-						responded = true;
-						extInstalled = true;
-						clearInterval(flagCheckInterval);
-						clearInterval(pingInterval);
-						window.removeEventListener('message', handleMessage);
-						document.removeEventListener('thereview-extension-installed', handleCustomEvent);
-					}
-				} catch (err) {
-					// ignore
-				}
-			}, 300);
-
-			return () => {
-				window.removeEventListener('message', handleMessage);
-				document.removeEventListener('thereview-extension-installed', handleCustomEvent);
-				if (pingInterval) clearInterval(pingInterval);
-				if (flagCheckInterval) clearInterval(flagCheckInterval);
-			};
-		});
+		return cleanupListeners;
+	});
  
 async function addMeme(event) {
 	event.preventDefault();
