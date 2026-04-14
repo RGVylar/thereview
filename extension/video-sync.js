@@ -72,6 +72,27 @@
     document.querySelectorAll('video').forEach(attachToVideo);
   }
 
+  async function probeAutoplay(video) {
+    const wasPaused = video.paused;
+    const previousTime = video.currentTime;
+    try {
+      await video.play();
+      if (wasPaused) {
+        video.pause();
+        if (Math.abs(video.currentTime - previousTime) > 0.05) {
+          video.currentTime = previousTime;
+        }
+      }
+      try {
+        window.parent.postMessage({ type: 'THEREVIEW_AUTOPLAY_PROBE_RESULT', ready: true }, '*');
+      } catch (_) {}
+    } catch (_) {
+      try {
+        window.parent.postMessage({ type: 'THEREVIEW_AUTOPLAY_PROBE_RESULT', ready: false }, '*');
+      } catch (_) {}
+    }
+  }
+
   // TikTok and Twitter/X render video elements on navigation without a full
   // page reload, so we need a MutationObserver to catch them.
   const observer = new MutationObserver(scanVideos);
@@ -92,6 +113,16 @@
   window.addEventListener('message', (e) => {
     try {
       if (!e?.data) return;
+      if (e.data.type === 'THEREVIEW_AUTOPLAY_PROBE') {
+        const videos = Array.from(document.querySelectorAll('video'));
+        const target = videos[0];
+        if (!target) {
+          window.parent.postMessage({ type: 'THEREVIEW_AUTOPLAY_PROBE_RESULT', ready: false, pending: true }, '*');
+          return;
+        }
+        probeAutoplay(target);
+        return;
+      }
       if (e.data.type !== 'THEREVIEW_PLAYBACK_REMOTE') return;
       const videos = Array.from(document.querySelectorAll('video'));
       const target = videos.find((v) => !v.paused) ?? videos[0];

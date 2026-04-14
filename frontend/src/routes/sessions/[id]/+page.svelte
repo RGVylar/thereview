@@ -38,6 +38,7 @@
 
 	// Per-user playback state keyed by user_id: { playing: bool }
 	let playbackStates = $state({});
+	let autoplayReady = $state(null);
 
 	// True when someone else is playing but the local user isn't yet.
 	// Based purely on received WS events — no reliance on browser error signals.
@@ -84,6 +85,10 @@
 				const type = e.data?.type;
 				if (!type) return;
 				const uid = authVal.user?.id;
+				if (type === 'THEREVIEW_AUTOPLAY_PROBE_RESULT') {
+					if (!e.data.pending) autoplayReady = !!e.data.ready;
+					return;
+				}
 				if (type === 'THEREVIEW_PLAYBACK_STATE') {
 					if (uid) {
 						playbackStates = {
@@ -119,6 +124,7 @@
 				} else if (msg.type === 'navigate') {
 					currentIndex = msg.index;
 					playbackStates = {};
+					autoplayReady = null;
 				} else if (msg.type === 'vote') {
 					// Update local votes from remote
 					votes = votes.filter(
@@ -315,6 +321,7 @@
 		if (currentIndex > 0) {
 			currentIndex--;
 			playbackStates = {};
+			autoplayReady = null;
 			if (ws && ws.readyState === WebSocket.OPEN) {
 				ws.send(JSON.stringify({ type: 'navigate', index: currentIndex }));
 			}
@@ -325,6 +332,7 @@
 		if (currentIndex < session.session_memes.length - 1) {
 			currentIndex++;
 			playbackStates = {};
+			autoplayReady = null;
 			if (ws && ws.readyState === WebSocket.OPEN) {
 				ws.send(JSON.stringify({ type: 'navigate', index: currentIndex }));
 			}
@@ -366,6 +374,30 @@
 		return embedType === 'tiktok' || embedType === 'twitter';
 	}
 
+	$effect(() => {
+		const sm = session?.session_memes?.[currentIndex];
+		if (!sm) return;
+		const embed = detectEmbed(sm.meme.url);
+		if (!isSyncMedia(embed.type)) return;
+		autoplayReady = null;
+
+		let attempts = 0;
+		const interval = setInterval(() => {
+			attempts += 1;
+			try {
+				const iframe = document.querySelector('.meme-display iframe');
+				if (iframe?.contentWindow) {
+					iframe.contentWindow.postMessage({ type: 'THEREVIEW_AUTOPLAY_PROBE' }, '*');
+				}
+			} catch (e) {}
+			if (attempts >= 4 || autoplayReady !== null) {
+				clearInterval(interval);
+			}
+		}, 900);
+
+		return () => clearInterval(interval);
+	});
+
 </script>
 
 <div class="container">
@@ -391,9 +423,14 @@
 						<span class="timer">⏱️ {elapsed}</span>
 						<span class="connected">🟢 {connectedUsers} online</span>
 					</div>
-				{/if}					{#if outOfSync}
+				{/if}
+					{#if autoplayReady === false}
+						<p class="autoplay-hint">Activa este embed con un primer Play local para que la sincronización automática funcione desde el inicio.</p>
+					{/if}
+					{#if outOfSync}
 						<p class="out-of-sync-hint">▶ Pulsa Play en el player para unirte al grupo</p>
-					{/if}				{#if syncMessage}
+					{/if}
+					{#if syncMessage}
 					<p class="sync-toast">{syncMessage}</p>
 				{/if}
 			</div>
@@ -885,6 +922,15 @@
 		padding: 0.3rem 0.6rem;
 		border-radius: 6px;
 		background: rgba(255, 100, 60, 0.1);
+		animation: fadeIn 0.3s;
+	}
+	.autoplay-hint {
+		font-size: 0.82rem;
+		color: var(--text-muted);
+		text-align: center;
+		padding: 0.3rem 0.6rem;
+		border-radius: 6px;
+		background: rgba(255, 255, 255, 0.06);
 		animation: fadeIn 0.3s;
 	}
 </style>
