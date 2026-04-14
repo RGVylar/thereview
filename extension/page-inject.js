@@ -4,6 +4,16 @@
     window.__THEREVIEW_EXTENSION_INSTALLED = true;
     window.__THEREVIEW_EXTENSION_VERSION = '0.1.0';
 
+    // Dispatch a custom DOM event so the page can detect installation immediately
+    try {
+      const ev = new CustomEvent('thereview-extension-installed', {
+        detail: { version: window.__THEREVIEW_EXTENSION_VERSION },
+      });
+      document.dispatchEvent(ev);
+    } catch (err) {
+      // ignore
+    }
+
     // Optional: reply to pings originating from the page itself
     window.addEventListener('message', function (e) {
       try {
