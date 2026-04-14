@@ -1,0 +1,33 @@
+{
+  "manifest_version": 3,
+  "name": "The Review Sync (prototype)",
+  "version": "0.1.0",
+  "description": "Prototype extension: responds to page ping so the web app can detect installation.",
+  "permissions": ["storage", "scripting", "activeTab", "tabs"],
+  "host_permissions": [
+    "*://*.tiktok.com/*",
+    "*://*.twitter.com/*",
+    "*://twitter.com/*",
+    "*://*.x.com/*",
+    "*://*.youtube.com/*"
+  ],
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "*://*.tiktok.com/*",
+        "*://*.twitter.com/*",
+        "*://twitter.com/*",
+        "*://x.com/*",
+        "*://*.youtube.com/*"
+      ],
+      "js": ["content-script.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "background": {
+    "service_worker": "background.js"
+  }
+}

@@ -4,6 +4,7 @@
 	import { api } from '$lib/api.js';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
+	import { onMount } from 'svelte';
 
 	let { children } = $props();
 	let authVal;
@@ -16,6 +17,31 @@
 	let adding = $state(false);
 	let pendingInvites = $state(0);
 	let inviteInterval = null;
+
+	// Detección de la extensión: null = desconocido, true = instalada, false = no instalada
+	let extInstalled = null;
+
+	onMount(() => {
+		let responded = false;
+
+		function handleMessage(e) {
+			if (!e?.data) return;
+			if (e.data.type === 'THEREVIEW_EXTENSION_PONG') {
+				responded = true;
+				extInstalled = true;
+				window.removeEventListener('message', handleMessage);
+			}
+		}
+
+		window.addEventListener('message', handleMessage);
+		// Enviar ping a la extensión (si existe) desde la página
+		window.postMessage({ type: 'THEREVIEW_EXTENSION_PING' }, '*');
+
+		// Timeout corto para asumir que no está instalada
+		setTimeout(() => {
+			if (!responded) extInstalled = false;
+		}, 700);
+	});
  
 async function addMeme(event) {
 	event.preventDefault();
@@ -43,6 +69,10 @@ async function addMeme(event) {
 	function logout() {
 		auth.logout();
 		goto('/login');
+	}
+
+	function showInstallInstructions() {
+		alert('Para probar la extensión en Brave:\n1) Abre brave://extensions\n2) Activa "Developer mode"\n3) Pulsa "Load unpacked" y selecciona la carpeta "extension" en el repositorio.');
 	}
 
 	function isActive(path) {
@@ -99,6 +129,13 @@ async function addMeme(event) {
 			<button class="btn-ghost" onclick={logout}>Salir</button>
 		</div>
 	</nav>
+{/if}
+
+{#if extInstalled === false}
+	<div class="extension-banner">
+		La extensión de sincronización no está instalada.
+		<button class="btn-ghost" onclick={showInstallInstructions}>Instrucciones</button>
+	</div>
 {/if}
 
 <svelte:head>
@@ -186,6 +223,18 @@ async function addMeme(event) {
 		color: var(--accent);
 		font-size: 0.75rem;
 		margin-top: 0.25rem;
+	}
+
+	.extension-banner {
+		display: flex;
+		gap: 0.5rem;
+		align-items: center;
+		justify-content: center;
+		background: rgba(255, 165, 0, 0.06);
+		color: var(--text);
+		padding: 0.5rem 1rem;
+		border-bottom: 1px solid rgba(255,165,0,0.08);
+		font-size: 0.95rem;
 	}
 	main {
 		padding: 1rem 0;
