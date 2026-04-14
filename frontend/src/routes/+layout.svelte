@@ -8,11 +8,11 @@
 
 	let { children } = $props();
 
-	let extInstalled = null; // null = detecting, true = installed, false = not installed
-	let newUrl = '';
-	let adding = false;
-	let addError = '';
-	let pendingInvites = 0;
+	let extInstalled = $state(null); // null = detecting, true = installed, false = not installed
+	let newUrl = $state('');
+	let adding = $state(false);
+	let addError = $state('');
+	let pendingInvites = $state(0);
 	let inviteInterval = null;
 
 	$effect(() => {
