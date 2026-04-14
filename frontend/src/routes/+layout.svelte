@@ -29,6 +29,8 @@
 		let attempts = 0;
 		const maxAttempts = 6;
 
+		console.log('[thereview] onMount: starting extension detection');
+
 		function cleanup() {
 			window.removeEventListener('message', onMsg);
 			document.removeEventListener('thereview-extension-installed', onCustom);
@@ -37,30 +39,37 @@
 		}
 
 		function markInstalled(reason) {
-			console.debug('thereview: extension detected -', reason);
+			console.log('[thereview] EXTENSION DETECTED via:', reason);
 			responded = true;
 			extInstalled = true;
+			console.log('[thereview] extInstalled set to:', extInstalled);
 			cleanup();
 		}
 
 		function onMsg(e) {
+			console.log('[thereview] window message received:', e?.data);
 			if (e?.data?.type === 'THEREVIEW_EXTENSION_PONG') markInstalled('pong');
 		}
 
-		function onCustom() {
+		function onCustom(e) {
+			console.log('[thereview] custom event received:', e?.detail);
 			markInstalled('custom event');
 		}
 
 		// Check if already set by injected script
+		console.log('[thereview] checking window.__THEREVIEW_EXTENSION_INSTALLED:', window.__THEREVIEW_EXTENSION_INSTALLED);
 		try {
 			if (window.__THEREVIEW_EXTENSION_INSTALLED === true) {
 				markInstalled('flag already set');
 				return cleanup;
 			}
-		} catch (_) {}
+		} catch (err) {
+			console.warn('[thereview] error reading flag:', err);
+		}
 
 		window.addEventListener('message', onMsg);
 		document.addEventListener('thereview-extension-installed', onCustom);
+		console.log('[thereview] listeners registered, sending first ping');
 
 		// Immediate ping
 		window.postMessage({ type: 'THEREVIEW_EXTENSION_PING' }, '*');
@@ -68,17 +77,25 @@
 		// Retry pings
 		pingInterval = setInterval(() => {
 			attempts++;
+			console.log('[thereview] ping attempt', attempts, '/', maxAttempts, '| responded:', responded);
 			window.postMessage({ type: 'THEREVIEW_EXTENSION_PING' }, '*');
 			if (responded || attempts >= maxAttempts) {
 				clearInterval(pingInterval);
-				if (!responded) extInstalled = false;
+				if (!responded) {
+					console.log('[thereview] no pong after', maxAttempts, 'attempts → extInstalled = false');
+					extInstalled = false;
+				}
 			}
 		}, 500);
 
 		// Poll for injected flag
 		flagCheckInterval = setInterval(() => {
 			try {
-				if (window.__THEREVIEW_EXTENSION_INSTALLED === true) markInstalled('flag poll');
+				const flag = window.__THEREVIEW_EXTENSION_INSTALLED;
+				if (flag === true) {
+					console.log('[thereview] flag poll found flag = true');
+					markInstalled('flag poll');
+				}
 			} catch (_) {}
 		}, 300);
 
