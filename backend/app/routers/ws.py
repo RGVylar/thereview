@@ -172,6 +172,19 @@ async def session_ws(websocket: WebSocket, session_id: int, token: str = Query(.
                     {"type": "play_sync", "user": display_name},
                 )
 
+            elif msg_type == "playback":
+                # Video playback sync (play/pause/seek) from browser extension
+                await _broadcast(
+                    session_id,
+                    {
+                        "type": "playback",
+                        "action": msg.get("action"),       # "play" | "pause" | "seek"
+                        "currentTime": msg.get("currentTime"),
+                        "user": display_name,
+                    },
+                    exclude_uid=user_id,  # don't echo back to sender
+                )
+
     except WebSocketDisconnect:
         pass
     finally:

@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "The Review Sync (prototype)",
-  "version": "0.1.0",
-  "description": "Prototype extension: responds to page ping so the web app can detect installation.",
+  "name": "The Review Sync",
+  "version": "0.2.0",
+  "description": "Sincroniza la reproducción de vídeos de TikTok y Twitter/X entre participantes de una sesión de The Review.",
   "permissions": ["storage", "scripting", "activeTab", "tabs"],
   "host_permissions": [
     "*://*.tiktok.com/*",
@@ -45,6 +45,16 @@
       ],
       "js": ["content-script.js"],
       "run_at": "document_start"
+    },
+    {
+      "matches": [
+        "*://*.tiktok.com/*",
+        "*://*.twitter.com/*",
+        "*://twitter.com/*",
+        "*://x.com/*"
+      ],
+      "js": ["video-sync.js"],
+      "run_at": "document_idle"
     }
   ],
   "background": {
@@ -53,7 +63,7 @@
   ,
   "web_accessible_resources": [
     {
-      "resources": ["page-inject.js"],
+      "resources": ["page-inject.js", "video-sync.js"],
       "matches": ["*://*/*"]
     }
   ]

@@ -1,0 +1,87 @@
+/**
+ * video-sync.js — Content script for TikTok and Twitter/X
+ *
+ * Responsibilities:
+ *   1. Detect <video> elements (including those added dynamically).
+ *   2. Listen for play/pause/seeked events and relay them to the background
+ *      so they can be forwarded to the thereview session WebSocket.
+ *   3. Receive remote playback commands from the background and apply them
+ *      to the current video, avoiding feedback loops via isSyncing flag.
+ */
+(function () {
+  'use strict';
+
+  // Prevents feedback loop: when we programmatically play/pause/seek,
+  // the resulting events must not be re-sent as local events.
+  let isSyncing = false;
+
+  // WeakSet to avoid attaching duplicate listeners to the same element.
+  const attached = new WeakSet();
+
+  /**
+   * Apply a remote playback command to a video element.
+   * Sets isSyncing to true during the operation and clears it after 300 ms
+   * to absorb any events the browser fires in response.
+   */
+  function applyRemote(video, payload) {
+    isSyncing = true;
+    try {
+      const { action, currentTime } = payload;
+      if (action === 'seek' || action === 'play') {
+        if (typeof currentTime === 'number' && Math.abs(video.currentTime - currentTime) > 0.5) {
+          video.currentTime = currentTime;
+        }
+      }
+      if (action === 'play') {
+        video.play().catch(() => {});
+      } else if (action === 'pause') {
+        video.pause();
+      }
+    } finally {
+      setTimeout(() => { isSyncing = false; }, 300);
+    }
+  }
+
+  /**
+   * Attach play/pause/seeked listeners to a video element.
+   * Sends TR_PLAYBACK_LOCAL to background on each event (unless we are
+   * in the middle of applying a remote command).
+   */
+  function attachToVideo(video) {
+    if (attached.has(video)) return;
+    attached.add(video);
+
+    for (const evt of ['play', 'pause', 'seeked']) {
+      video.addEventListener(evt, () => {
+        if (isSyncing) return;
+        const action = evt === 'seeked' ? 'seek' : evt;
+        chrome.runtime.sendMessage({
+          type: 'TR_PLAYBACK_LOCAL',
+          payload: { action, currentTime: video.currentTime },
+        }).catch(() => {});
+      });
+    }
+  }
+
+  /** Scan the DOM for any <video> we haven't attached to yet. */
+  function scanVideos() {
+    document.querySelectorAll('video').forEach(attachToVideo);
+  }
+
+  // TikTok and Twitter/X render video elements on navigation without a full
+  // page reload, so we need a MutationObserver to catch them.
+  const observer = new MutationObserver(scanVideos);
+  observer.observe(document.documentElement, { childList: true, subtree: true });
+  scanVideos();
+
+  // Receive remote playback commands forwarded by background.js
+  chrome.runtime.onMessage.addListener((msg) => {
+    if (msg.type !== 'TR_PLAYBACK_APPLY') return;
+    // Apply to the first visible video (the "active" one in the viewport)
+    const videos = Array.from(document.querySelectorAll('video'));
+    const target = videos.find((v) => !v.paused || msg.payload.action === 'pause') ?? videos[0];
+    if (target) applyRemote(target, msg.payload);
+  });
+
+  console.log('[thereview] video-sync.js active on', location.hostname);
+})();

@@ -48,7 +48,37 @@
 
   window.addEventListener('message', onMessage, false);
 
-  // Optional marker for debugging (DOM)
+  // ── Relay: page ↔ background (sync session signalling) ───────────────────
+  // Listens for postMessages from the thereview frontend and forwards them to
+  // the background service worker, and vice-versa.
+
+  window.addEventListener('message', (e) => {
+    const t = e.data?.type;
+    if (!t) return;
+
+    // Frontend → background: user entered/left a session
+    if (t === 'THEREVIEW_JOIN_SYNC') {
+      chrome.runtime.sendMessage({ type: 'TR_JOIN_SYNC', sessionId: e.data.sessionId }).catch(() => {});
+    } else if (t === 'THEREVIEW_LEAVE_SYNC') {
+      chrome.runtime.sendMessage({ type: 'TR_LEAVE_SYNC' }).catch(() => {});
+
+    // Frontend → background: remote playback event received from WS
+    } else if (t === 'THEREVIEW_PLAYBACK_REMOTE') {
+      chrome.runtime.sendMessage({
+        type: 'TR_PLAYBACK_REMOTE',
+        payload: { action: e.data.action, currentTime: e.data.currentTime },
+      }).catch(() => {});
+    }
+  });
+
+  // Background → page: relay local video event to the frontend page
+  chrome.runtime.onMessage.addListener((msg) => {
+    if (msg.type === 'TR_RELAY_TO_PAGE') {
+      window.postMessage({ type: 'THEREVIEW_PLAYBACK_LOCAL', ...msg.payload }, '*');
+    }
+  });
+
+  // ── Debug: optional marker for DevTools ───────────────────────────────────
   try {
     const meta = document.createElement('meta');
     meta.name = 'thereview-extension';

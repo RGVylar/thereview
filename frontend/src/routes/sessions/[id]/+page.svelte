@@ -26,6 +26,9 @@
 	let connectedUsers = $state(0);
 	let syncMessage = $state('');
 
+	// Extension sync: listener for local video events relayed from extension
+	let extPlaybackHandler = null;
+
 	// Timer
 	let elapsed = $state('00:00');
 	let timerInterval = $state(null);
@@ -61,6 +64,20 @@
 
 		socket.onopen = () => {
 			syncMessage = '';
+			// Tell the extension which session we joined so it can route video events
+			window.postMessage({ type: 'THEREVIEW_JOIN_SYNC', sessionId }, '*');
+			// Listen for local video events relayed from extension → send via WS
+			if (extPlaybackHandler) window.removeEventListener('message', extPlaybackHandler);
+			extPlaybackHandler = (e) => {
+				if (e.data?.type !== 'THEREVIEW_PLAYBACK_LOCAL') return;
+				if (socket.readyState !== WebSocket.OPEN) return;
+				socket.send(JSON.stringify({
+					type: 'playback',
+					action: e.data.action,
+					currentTime: e.data.currentTime,
+				}));
+			};
+			window.addEventListener('message', extPlaybackHandler);
 		};
 
 		socket.onmessage = (event) => {
@@ -91,6 +108,13 @@
 					}
 				} else if (msg.type === 'play_sync') {
 					mediaPlaying = true;
+				} else if (msg.type === 'playback') {
+					// Relay remote playback command to extension → it will control the video
+					window.postMessage({
+						type: 'THEREVIEW_PLAYBACK_REMOTE',
+						action: msg.action,
+						currentTime: msg.currentTime,
+					}, '*');
 				} else if (msg.type === 'join' || msg.type === 'leave') {
 					connectedUsers = msg.count;
 					syncMessage = `${msg.user} ${msg.type === 'join' ? 'se ha unido' : 'se ha ido'}`;
@@ -101,6 +125,11 @@
 
 		socket.onclose = () => {
 			ws = null;
+			window.postMessage({ type: 'THEREVIEW_LEAVE_SYNC' }, '*');
+			if (extPlaybackHandler) {
+				window.removeEventListener('message', extPlaybackHandler);
+				extPlaybackHandler = null;
+			}
 		};
 
 		ws = socket;

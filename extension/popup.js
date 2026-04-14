@@ -1,3 +1,16 @@
-document.getElementById('install').addEventListener('click', () => {
-  alert('Para cargar la extensión en Brave:\n1) Abre brave://extensions\n2) Activa "Developer mode"\n3) Pulsa "Load unpacked" y selecciona la carpeta "extension" en el repositorio.');
+const statusEl = document.getElementById('status');
+
+chrome.runtime.sendMessage({ type: 'TR_STATUS' }, (res) => {
+  if (chrome.runtime.lastError || !res) {
+    statusEl.textContent = '⚠️ No se pudo contactar con el worker.';
+    statusEl.style.background = '#ffe5e5';
+    return;
+  }
+  if (res.connected) {
+    statusEl.innerHTML = `✅ <strong>Sincronizado</strong> — sesión ${res.sessionId}`;
+    statusEl.style.background = '#e5ffe9';
+  } else {
+    statusEl.textContent = '🔴 Sin sesión activa. Abre una sesión en The Review.';
+    statusEl.style.background = '#fff3cd';
+  }
 });
