@@ -113,36 +113,14 @@ async function addMeme(event) {
 			return;
 		}
 		refreshInviteCount();
-			background: rgba(255, 165, 0, 0.06);
-			color: var(--text);
-			padding: 0.5rem 1rem;
-			border-bottom: 1px solid rgba(255,165,0,0.08);
-			font-size: 0.95rem;
-			justify-content: space-between;
-			padding-left: 1.25rem;
-			padding-right: 1.25rem;
-			gap: 1rem;
+		if (inviteInterval) clearInterval(inviteInterval);
+		inviteInterval = setInterval(refreshInviteCount, 15000);
+		return () => {
+			if (inviteInterval) clearInterval(inviteInterval);
+		};
 	});
 
-		.extension-banner-urgent {
-			background: rgba(220,53,69,0.06);
-			border-bottom: 1px solid rgba(220,53,69,0.08);
-			color: var(--text);
-		}
-
-		.banner-content {
-			display: flex;
-			flex-direction: column;
-		}
-
-		.banner-sub {
-			font-size: 0.85rem;
-			color: var(--text-muted);
-		}
-
-		.banner-actions {
-			display: flex;
-			gap: 0.5rem;
+</script>
 </script>
 
 {#if authVal?.token}
@@ -319,6 +297,28 @@ async function addMeme(event) {
 		border-bottom: 1px solid rgba(255,165,0,0.08);
 		font-size: 0.95rem;
 	}
+
+	.extension-banner-urgent {
+		background: rgba(220,53,69,0.06);
+		border-bottom: 1px solid rgba(220,53,69,0.08);
+		color: var(--text);
+	}
+
+	.banner-content {
+		display: flex;
+		flex-direction: column;
+	}
+
+	.banner-sub {
+		font-size: 0.85rem;
+		color: var(--text-muted);
+	}
+
+	.banner-actions {
+		display: flex;
+		gap: 0.5rem;
+	}
+
 	main {
 		padding: 1rem 0;
 	}
