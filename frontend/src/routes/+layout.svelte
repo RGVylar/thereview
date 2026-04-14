@@ -7,6 +7,18 @@
 	import { onMount } from 'svelte';
 
 	let extInstalled = null; // null = detecting, true = installed, false = not installed
+	let newUrl = '';
+	let adding = false;
+	let addError = '';
+	let authVal;
+	let pageVal;
+	let pendingInvites = 0;
+	let inviteInterval = null;
+
+	$effect(() => {
+		authVal = $auth;
+		pageVal = $page;
+	});
 
 	onMount(() => {
 		let responded = false;
