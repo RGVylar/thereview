@@ -12,17 +12,23 @@
 	let newUrl = '';
 	let adding = false;
 	let addError = '';
-	let authVal;
-	let pageVal;
 	let pendingInvites = 0;
 	let inviteInterval = null;
 
 	$effect(() => {
-		authVal = $auth;
-		pageVal = $page;
+		if (!$auth?.token) {
+			pendingInvites = 0;
+			if (inviteInterval) clearInterval(inviteInterval);
+			inviteInterval = null;
+			return;
+		}
+		refreshInviteCount();
+		if (inviteInterval) clearInterval(inviteInterval);
+		inviteInterval = setInterval(refreshInviteCount, 15000);
+		return () => {
+			if (inviteInterval) clearInterval(inviteInterval);
+		};
 	});
-
-	onMount(() => {
 		let responded = false;
 		let pingInterval = null;
 		let flagCheckInterval = null;
@@ -119,7 +125,7 @@ async function addMeme(event) {
 		await api('/api/memes', {
 			method: 'POST',
 			body: { url: newUrl.trim() },
-			token: authVal.token,
+			token: $auth.token,
 		});
 		newUrl = '';
 		// Navigate to profile so user can see the embed immediately
@@ -140,15 +146,15 @@ async function addMeme(event) {
 	}
 
 	function isActive(path) {
-		return pageVal?.url?.pathname?.startsWith(path);
+		return $page?.url?.pathname?.startsWith(path);
 	}
 
 	async function refreshInviteCount() {
-		if (!authVal?.token) return;
+		if (!$auth?.token) return;
 		try {
-			const sessions = await api('/api/sessions', { token: authVal.token });
+			const sessions = await api('/api/sessions', { token: $auth.token });
 			pendingInvites = sessions.filter(
-				(s) => s.status === 'pending' && s.created_by !== authVal.user?.id
+				(s) => s.status === 'pending' && s.created_by !== $auth.user?.id
 			).length;
 		} catch {
 			// ignore navbar badge errors
@@ -172,7 +178,7 @@ async function addMeme(event) {
 
 </script>
 
-{#if authVal?.token}
+{#if $auth?.token}
 	<nav class="navbar">
 		<a href="/" class="brand">🍿 The Review</a>
 			<div class="nav-add">
@@ -190,7 +196,7 @@ async function addMeme(event) {
 					<span class="invite-badge">{pendingInvites}</span>
 				{/if}
 			</a>
-			<span class="nav-user">👤 {authVal.user?.display_name}</span>
+			<span class="nav-user">👤 {$auth.user?.display_name}</span>
 			<button class="btn-ghost" onclick={logout}>Salir</button>
 			{#if extInstalled === true}
 				<span class="ext-status ext-connected" title="Extensión instalada">🔌 Extensión activa</span>
