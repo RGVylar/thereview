@@ -122,3 +122,10 @@ pct exec 201 -- bash -lc '
 '
 pct exec 201 -- bash -lc 'cd /opt/thereview && sudo -u thereview git pull && cd backend && sudo -u thereview .venv/bin/alembic upgrade head && cd ../frontend && sudo -u thereview npm run build --silent && systemctl restart thereview-api && systemctl reload caddy'
 ```
+
+## Tareas pendientes
+
+- **Extensión de navegador (cliente)**: herramienta para usuarios que permita, desde el cliente, las siguientes funciones de comportamiento esperado:
+  - Extraer/exportar rápidamente todo el contenido guardado en TikTok (biblioteca/guardados) para importarlo en The Review.
+  - Habilitar reproducción sincronizada entre participantes: cuando un usuario pulse “Play”, todos los participantes deberán reproducir el mismo contenido simultáneamente.
+  - Detalle: no se especifica cómo debe implementarse; la implementación será abordada posteriormente por Claude.
