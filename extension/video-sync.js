@@ -18,6 +18,65 @@
   // WeakSet to avoid attaching duplicate listeners to the same element.
   const attached = new WeakSet();
 
+  function isVisible(el) {
+    if (!el || !el.isConnected) return false;
+    const style = window.getComputedStyle(el);
+    if (style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity) === 0) {
+      return false;
+    }
+    const rect = el.getBoundingClientRect();
+    return rect.width > 40 && rect.height > 40;
+  }
+
+  function getPrimaryVideo(preferPlaying = false) {
+    const videos = Array.from(document.querySelectorAll('video')).filter(isVisible);
+    if (!videos.length) return null;
+    if (preferPlaying) {
+      const active = videos.find((video) => !video.paused);
+      if (active) return active;
+    }
+    return videos.sort((left, right) => {
+      const leftRect = left.getBoundingClientRect();
+      const rightRect = right.getBoundingClientRect();
+      return (rightRect.width * rightRect.height) - (leftRect.width * leftRect.height);
+    })[0];
+  }
+
+  function clickVisiblePlayButton() {
+    const selectors = [
+      'button[aria-label*="Play" i]',
+      'button[title*="Play" i]',
+      'button[data-e2e*="play" i]',
+      '[role="button"][aria-label*="Play" i]',
+      '[class*="play" i] button',
+      'button'
+    ];
+    for (const selector of selectors) {
+      const button = Array.from(document.querySelectorAll(selector)).find((candidate) => {
+        if (!isVisible(candidate)) return false;
+        const label = [candidate.getAttribute('aria-label'), candidate.getAttribute('title'), candidate.textContent]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase();
+        return selector === 'button' ? /play|resume|reproducir/.test(label) : true;
+      });
+      if (button) {
+        button.click();
+        return true;
+      }
+    }
+    return false;
+  }
+
+  async function requestPlay(video) {
+    try {
+      await video.play();
+      return true;
+    } catch (_) {
+      return clickVisiblePlayButton();
+    }
+  }
+
   /**
    * Apply a remote playback command to a video element.
    * Sets isSyncing to true during the operation and clears it after 300 ms
@@ -33,7 +92,7 @@
         }
       }
       if (action === 'play') {
-        video.play().catch(() => {});
+        requestPlay(video).catch(() => {});
       } else if (action === 'pause') {
         video.pause();
       }
@@ -76,7 +135,7 @@
     const wasPaused = video.paused;
     const previousTime = video.currentTime;
     try {
-      await video.play();
+      await requestPlay(video);
       if (wasPaused) {
         video.pause();
         if (Math.abs(video.currentTime - previousTime) > 0.05) {
@@ -102,9 +161,7 @@
   // Receive remote playback commands forwarded by background.js
   chrome.runtime.onMessage.addListener((msg) => {
     if (msg.type !== 'TR_PLAYBACK_APPLY') return;
-    // Apply to the first visible video (the "active" one in the viewport)
-    const videos = Array.from(document.querySelectorAll('video'));
-    const target = videos.find((v) => !v.paused || msg.payload.action === 'pause') ?? videos[0];
+    const target = getPrimaryVideo(msg.payload.action === 'pause' || msg.payload.action === 'play');
     if (target) applyRemote(target, msg.payload);
   });
 
@@ -114,8 +171,7 @@
     try {
       if (!e?.data) return;
       if (e.data.type === 'THEREVIEW_AUTOPLAY_PROBE') {
-        const videos = Array.from(document.querySelectorAll('video'));
-        const target = videos[0];
+        const target = getPrimaryVideo(false);
         if (!target) {
           window.parent.postMessage({ type: 'THEREVIEW_AUTOPLAY_PROBE_RESULT', ready: false, pending: true }, '*');
           return;
@@ -124,8 +180,7 @@
         return;
       }
       if (e.data.type !== 'THEREVIEW_PLAYBACK_REMOTE') return;
-      const videos = Array.from(document.querySelectorAll('video'));
-      const target = videos.find((v) => !v.paused) ?? videos[0];
+      const target = getPrimaryVideo(e.data.action === 'pause' || e.data.action === 'play');
       if (target) applyRemote(target, { action: e.data.action, currentTime: e.data.currentTime });
     } catch (err) {
       // ignore
