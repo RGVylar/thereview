@@ -181,6 +181,17 @@
 	{@render children()}
 </main>
 
+<footer>
+	<a
+		href="https://ko-fi.com/Z8Z81OW7UV"
+		target="_blank"
+		rel="noopener noreferrer"
+		class="kofi-link"
+	>
+		☕ Invítame una
+	</a>
+</footer>
+
 <style>
 	.navbar {
 		display: flex;
@@ -329,6 +340,30 @@
 
 	main {
 		padding: 1rem 0;
+	}
+
+	footer {
+		text-align: center;
+		padding: 1.5rem 0 1rem;
+	}
+
+	.kofi-link {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.4rem;
+		font-size: 0.78rem;
+		color: var(--text-muted);
+		text-decoration: none;
+		padding: 0.4rem 0.9rem;
+		border-radius: 99px;
+		border: 1px solid var(--border);
+		background: var(--bg-card);
+		transition: color 0.2s, border-color 0.2s;
+	}
+
+	.kofi-link:hover {
+		color: var(--text);
+		border-color: var(--text-muted);
 	}
 
 	@media (max-width: 640px) {
