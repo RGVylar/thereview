@@ -13,7 +13,9 @@
 
   // Prevents feedback loop: when we programmatically play/pause/seek,
   // the resulting events must not be re-sent as local events.
-  let isSyncing = false;
+  // Counter instead of boolean so overlapping applyRemote calls don't
+  // prematurely clear the guard (race condition with 300 ms timeout).
+  let isSyncingCount = 0;
 
   // WeakSet to avoid attaching duplicate listeners to the same element.
   const attached = new WeakSet();
@@ -83,7 +85,7 @@
    * to absorb any events the browser fires in response.
    */
   function applyRemote(video, payload) {
-    isSyncing = true;
+    isSyncingCount++;
     try {
       const { action, currentTime } = payload;
       if (action === 'seek' || action === 'play') {
@@ -97,7 +99,7 @@
         video.pause();
       }
     } finally {
-      setTimeout(() => { isSyncing = false; }, 300);
+      setTimeout(() => { isSyncingCount = Math.max(0, isSyncingCount - 1); }, 300);
     }
   }
 
@@ -117,7 +119,7 @@
           type: 'TR_PLAYBACK_STATE',
           payload: { playing: !video.paused, currentTime: video.currentTime },
         }).catch(() => {});
-        if (isSyncing) return;
+        if (isSyncingCount > 0) return;
         chrome.runtime.sendMessage({
           type: 'TR_PLAYBACK_LOCAL',
           payload: { action, currentTime: video.currentTime },

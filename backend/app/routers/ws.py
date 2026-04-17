@@ -196,7 +196,7 @@ async def session_ws(websocket: WebSocket, session_id: int, token: str = Query(.
                         "user_id": user_id,
                         "user": display_name,
                     },
-                    exclude_uid=None,
+                    exclude_uid=user_id,  # don't echo own state back to sender
                 )
 
     except WebSocketDisconnect:

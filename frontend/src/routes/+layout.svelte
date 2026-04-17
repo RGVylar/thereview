@@ -13,6 +13,37 @@
 	auth.subscribe((v) => (authVal = v));
 	page.subscribe((v) => (pageVal = v));
 
+	// Dev auto-login — only active during `vite dev`, never in production builds
+	if (import.meta.env.DEV) {
+		$effect(() => {
+			if (authVal?.token) return;
+			(async () => {
+				try {
+					await fetch('/api/auth/register', {
+						method: 'POST',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify({ username: 'dev', display_name: 'Dev', password: 'dev123' })
+					});
+				} catch { /* ignore */ }
+				try {
+					const loginRes = await fetch('/api/auth/login', {
+						method: 'POST',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify({ username: 'dev', password: 'dev123' })
+					});
+					if (!loginRes.ok) return;
+					const { access_token } = await loginRes.json();
+					const meRes = await fetch('/api/auth/me', {
+						headers: { Authorization: `Bearer ${access_token}` }
+					});
+					if (!meRes.ok) return;
+					const user = await meRes.json();
+					auth.login(access_token, user);
+				} catch { /* ignore */ }
+			})();
+		});
+	}
+
 	let extInstalled = $state(null); // null = detecting, true = installed, false = not installed
 	let newUrl = $state('');
 	let adding = $state(false);
@@ -123,7 +154,23 @@
 	}
 
 	function showInstallInstructions() {
-		alert('Para probar la extensión en Brave:\n1) Abre brave://extensions\n2) Activa "Developer mode"\n3) Pulsa "Load unpacked" y selecciona la carpeta "extension" del repositorio.');
+		// Trigger zip download
+		const a = document.createElement('a');
+		a.href = '/thereview-extension.zip';
+		a.download = 'thereview-extension.zip';
+		a.click();
+
+		// Show install steps after short delay so download dialog appears first
+		setTimeout(() => {
+			alert(
+				'Extensión descargada ✓\n\n' +
+				'Para instalarla en Brave / Chrome:\n' +
+				'1) Descomprime el zip descargado\n' +
+				'2) Abre brave://extensions (o chrome://extensions)\n' +
+				'3) Activa "Developer mode" (esquina superior derecha)\n' +
+				'4) Pulsa "Load unpacked" y selecciona la carpeta descomprimida'
+			);
+		}, 500);
 	}
 
 	function isActive(path) {

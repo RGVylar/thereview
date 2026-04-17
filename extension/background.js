@@ -51,26 +51,26 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       break;
 
     // ── Local video event (play/pause/seek on TikTok/Twitter) ───────────────
-    // video-sync.js → background → thereview tab → frontend → WS → backend
+    // video-sync.js → background → all thereview tabs → frontend → WS → backend
+    // Route to ALL syncTabs so that standalone TikTok/Twitter tabs (not embedded
+    // as iframes) also deliver their events to the session page.
     case 'TR_PLAYBACK_LOCAL':
-      // Route local media events back to the same tab that produced them.
-      // This avoids cross-user hijacking when multiple thereview tabs are open.
-      if (typeof fromTabId === 'number') {
-        chrome.tabs.sendMessage(fromTabId, {
+      syncTabs.forEach((tabId) => {
+        chrome.tabs.sendMessage(tabId, {
           type: 'TR_RELAY_TO_PAGE',
           payload: msg.payload,
         }).catch(() => {});
-      }
+      });
       sendResponse({ ok: true });
       break;
 
     case 'TR_PLAYBACK_STATE':
-      if (typeof fromTabId === 'number') {
-        chrome.tabs.sendMessage(fromTabId, {
+      syncTabs.forEach((tabId) => {
+        chrome.tabs.sendMessage(tabId, {
           type: 'TR_RELAY_STATE_TO_PAGE',
           payload: msg.payload,
         }).catch(() => {});
-      }
+      });
       sendResponse({ ok: true });
       break;
 

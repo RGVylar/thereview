@@ -149,7 +149,7 @@
 				} else if (msg.type === 'playback') {
 					// Relay remote playback command to the embed iframe
 					try {
-						const iframe = document.querySelector('.meme-display iframe');
+						const iframe = document.querySelector('.sync-media-wrap iframe');
 						if (iframe?.contentWindow) {
 							iframe.contentWindow.postMessage({ type: 'THEREVIEW_PLAYBACK_REMOTE', action: msg.action, currentTime: msg.currentTime }, '*');
 						} else {
@@ -358,7 +358,7 @@
 	function triggerPlaySync() {
 		const payload = { action: 'play', currentTime: 0 };
 		try {
-			const iframe = document.querySelector('.meme-display iframe');
+			const iframe = document.querySelector('.sync-media-wrap iframe');
 			if (iframe?.contentWindow) {
 				iframe.contentWindow.postMessage({ type: 'THEREVIEW_PLAYBACK_REMOTE', ...payload }, '*');
 			} else {
@@ -385,7 +385,7 @@
 		const interval = setInterval(() => {
 			attempts += 1;
 			try {
-				const iframe = document.querySelector('.meme-display iframe');
+				const iframe = document.querySelector('.sync-media-wrap iframe');
 				if (iframe?.contentWindow) {
 					iframe.contentWindow.postMessage({ type: 'THEREVIEW_AUTOPLAY_PROBE' }, '*');
 				}
