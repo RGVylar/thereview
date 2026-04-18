@@ -507,7 +507,7 @@
 								<iframe
 									src={embed.embedUrl}
 									title="TikTok"
-									allow="autoplay; encrypted-media"
+									allow="autoplay; fullscreen; encrypted-media"
 									allowfullscreen
 									class="embed-frame tiktok-frame"
 								></iframe>

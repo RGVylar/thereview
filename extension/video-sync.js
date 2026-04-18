@@ -74,9 +74,28 @@
     try {
       await video.play();
       return true;
+    } catch (_) {}
+
+    // Muted media can always be played programmatically regardless of autoplay
+    // policy. TikTok embeds are already muted via URL param (mute=1) so this
+    // doesn't change the audible experience — it just unblocks the browser.
+    const wasMuted = video.muted;
+    video.muted = true;
+    try {
+      await video.play();
+      return true;
     } catch (_) {
-      return clickVisiblePlayButton();
+      video.muted = wasMuted;
     }
+
+    // Last resort: synthetic click on the video element (TikTok player handles it)
+    try {
+      video.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+      await new Promise((r) => setTimeout(r, 150));
+      if (!video.paused) return true;
+    } catch (_) {}
+
+    return clickVisiblePlayButton();
   }
 
   /**

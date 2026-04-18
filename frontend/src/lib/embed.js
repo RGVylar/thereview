@@ -11,7 +11,11 @@ export function detectEmbed(url) {
 		if (host.includes('tiktok.com') || host === 'tiktokv.com') {
 			return {
 				type: 'tiktok',
-				embedUrl: `https://www.tiktok.com/embed/v2/${extractTikTokId(u)}?autoplay=1&mute=1`,
+				// player/v1 is TikTok's official embed API (embed/v2 is legacy and ignores URL params).
+				// autoplay=1 works when the parent page has sticky user activation (any prior click).
+				// In this app the user always clicks "Ready" or "Start" before seeing memes, so
+				// sticky activation is always present and Chrome allows unmuted autoplay via allow="autoplay".
+				embedUrl: `https://www.tiktok.com/player/v1/${extractTikTokId(u)}?autoplay=1&loop=0`,
 			};
 		}
 		if (host === 'twitter.com' || host === 'x.com') {
