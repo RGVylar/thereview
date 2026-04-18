@@ -16,6 +16,8 @@
 	let page = $state(1);
 	let perPage = $state(10);
 	let totalMemes = $state(0);
+	let pendingCount = $state(0);
+	let reviewedCount = $derived(totalMemes - pendingCount);
 
 	// ── TikTok import state ──────────────────────────────────────────────────── ───────────────────────────────────────────────────
 	let showImport = $state(false);
@@ -51,7 +53,10 @@
 		error = '';
 		loading = true;
 			try {
-				const res = await api(`/api/memes?pending=false&page=${page}&per_page=${perPage}`, { token: authVal.token });
+				const [res, pendingRes] = await Promise.all([
+					api(`/api/memes?pending=false&page=${page}&per_page=${perPage}`, { token: authVal.token }),
+					api(`/api/memes?pending=true&page=1&per_page=1`, { token: authVal.token }),
+				]);
 				let items = res;
 				if (!Array.isArray(res)) {
 					items = res.items || [];
@@ -59,6 +64,7 @@
 				} else {
 					totalMemes = items.length;
 				}
+				pendingCount = Array.isArray(pendingRes) ? pendingRes.length : (pendingRes.total || 0);
 
 				const mapped = items.map((m) => ({ ...m, embed: detectEmbed(m.url) }));
 
@@ -360,7 +366,16 @@
 
 <div class="container">
 	<div class="profile-header">
-		<h2 class="page-title">📦 Mis Memes</h2>
+		<div class="profile-title-wrap">
+			<h2 class="page-title">📦 Mis Memes</h2>
+			{#if totalMemes > 0}
+				<div class="meme-stats">
+					<span class="stat-chip stat-total" title="Total">📦 {totalMemes}</span>
+					<span class="stat-chip stat-pending" title="Pendientes de revisar">⏳ {pendingCount}</span>
+					<span class="stat-chip stat-reviewed" title="Ya revisados">✅ {reviewedCount}</span>
+				</div>
+			{/if}
+		</div>
 		<div class="header-actions">
 			{#if totalMemes > 0}
 				<button class="btn-danger-sm" onclick={deleteAllMemes}>🗑️ Borrar todos</button>
@@ -671,9 +686,44 @@
 		justify-content: space-between;
 		align-items: center;
 		margin-bottom: 1rem;
+		flex-wrap: wrap;
+		gap: 0.5rem;
+	}
+	.profile-title-wrap {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+		flex-wrap: wrap;
 	}
 	.profile-header .page-title {
 		margin-bottom: 0;
+	}
+	.meme-stats {
+		display: flex;
+		gap: 0.4rem;
+		align-items: center;
+	}
+	.stat-chip {
+		font-size: 0.78rem;
+		font-weight: 600;
+		padding: 0.2rem 0.6rem;
+		border-radius: 999px;
+		border: 1px solid transparent;
+	}
+	.stat-total {
+		background: rgba(255,255,255,0.06);
+		color: var(--text-muted);
+		border-color: rgba(255,255,255,0.08);
+	}
+	.stat-pending {
+		background: rgba(241,196,15,0.1);
+		color: #f1c40f;
+		border-color: rgba(241,196,15,0.2);
+	}
+	.stat-reviewed {
+		background: rgba(39,174,96,0.1);
+		color: #27ae60;
+		border-color: rgba(39,174,96,0.2);
 	}
 	.import-btn {
 		white-space: nowrap;
