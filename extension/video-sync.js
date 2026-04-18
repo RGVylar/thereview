@@ -77,12 +77,13 @@
     } catch (_) {}
 
     // Muted media can always be played programmatically regardless of autoplay
-    // policy. TikTok embeds are already muted via URL param (mute=1) so this
-    // doesn't change the audible experience — it just unblocks the browser.
+    // policy. Once playing, we restore the original muted state so local videos
+    // (served from our own backend) keep their sound.
     const wasMuted = video.muted;
     video.muted = true;
     try {
       await video.play();
+      video.muted = wasMuted; // restore — unmutes local <video> elements
       return true;
     } catch (_) {
       video.muted = wasMuted;
