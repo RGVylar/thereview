@@ -77,6 +77,27 @@
     }
   });
 
+  // ── Sync auth token to extension storage (thereview pages only) ───────────
+  // Allows tiktok-import.js to read the token without asking the user to log in again.
+  const _host = window.location.hostname;
+  const _isThereview = _host.includes('mugrelore.com') || _host === 'localhost' || _host === '127.0.0.1';
+  if (_isThereview) {
+    function _syncToken() {
+      try {
+        const raw = localStorage.getItem('auth');
+        if (!raw) return;
+        const { token } = JSON.parse(raw) || {};
+        if (token) {
+          chrome.storage.local.set({
+            thereview_auth: { token, serverUrl: window.location.origin },
+          });
+        }
+      } catch (_) {}
+    }
+    _syncToken();
+    setInterval(_syncToken, 10000);
+  }
+
   // ── Debug: optional marker for DevTools ───────────────────────────────────
   try {
     const meta = document.createElement('meta');

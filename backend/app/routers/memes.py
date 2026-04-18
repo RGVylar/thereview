@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session as DBSession
 from app.auth import get_current_user
 from app.database import get_db
 from app.models import Meme, User
-from app.schemas import DeadCheckRequest, DeadCheckResponse, MemeCreate, MemeList, MemeOut
+from app.schemas import DeadCheckRequest, DeadCheckResponse, MemeBatchCreate, MemeBatchResult, MemeCreate, MemeList, MemeOut
 
 router = APIRouter(prefix="/api/memes", tags=["memes"])
 
@@ -56,6 +56,36 @@ def check_dead_urls(
             except Exception:
                 pass
     return {"dead": dead}
+
+
+@router.post("/batch", response_model=MemeBatchResult)
+def add_memes_batch(
+    body: MemeBatchCreate,
+    db: DBSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Import multiple meme URLs at once, skipping duplicates. Max 1000 per call."""
+    urls = list(dict.fromkeys(str(u) for u in body.urls))[:1000]  # dedupe + cap
+
+    existing_urls = {
+        row[0]
+        for row in db.query(Meme.url)
+        .filter(Meme.user_id == current_user.id, Meme.url.in_(urls))
+        .all()
+    }
+
+    to_add = [u for u in urls if u not in existing_urls]
+    skipped = len(urls) - len(to_add)
+
+    for url in to_add:
+        db.add(Meme(url=url, user_id=current_user.id))
+
+    try:
+        db.commit()
+        return MemeBatchResult(imported=len(to_add), skipped=skipped, failed=0)
+    except Exception:
+        db.rollback()
+        return MemeBatchResult(imported=0, skipped=skipped, failed=len(to_add))
 
 
 @router.post("", response_model=MemeOut, status_code=status.HTTP_201_CREATED)

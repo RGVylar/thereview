@@ -62,6 +62,16 @@ class DeadCheckResponse(BaseModel):
     dead: list[str]
 
 
+class MemeBatchCreate(BaseModel):
+    urls: list[HttpUrl]
+
+
+class MemeBatchResult(BaseModel):
+    imported: int
+    skipped: int
+    failed: int
+
+
 # ── Session ───────────────────────────────────────────────────────────────────
 class SessionCreate(BaseModel):
     name: str
