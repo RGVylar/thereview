@@ -130,9 +130,24 @@ async def session_ws(websocket: WebSocket, session_id: int, token: str = Query(.
             msg_type = msg.get("type")
 
             if msg_type == "navigate":
+                new_index = int(msg.get("index", 0))
+                # Persist the highest index reached so finish_session knows
+                # which memes were actually viewed when marking reviewed_at.
+                def _update_position():
+                    _db = SessionLocal()
+                    try:
+                        from app.models import Session as _Session
+                        s = _db.query(_Session).filter(_Session.id == session_id).first()
+                        if s and new_index > s.current_position:
+                            s.current_position = new_index
+                            _db.commit()
+                    finally:
+                        _db.close()
+                import asyncio
+                asyncio.get_event_loop().run_in_executor(None, _update_position)
                 await _broadcast(
                     session_id,
-                    {"type": "navigate", "index": msg.get("index", 0), "user": display_name},
+                    {"type": "navigate", "index": new_index, "user": display_name},
                 )
 
             elif msg_type == "vote":

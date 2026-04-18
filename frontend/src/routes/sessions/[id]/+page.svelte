@@ -40,6 +40,10 @@
 	let playbackStates = $state({});
 	let autoplayReady = $state(null);
 
+	// Media download status keyed by meme_id: "pending" | "ready" | "failed"
+	let mediaStatus = $state({});
+	let mediaPoller = null;
+
 	// True when someone else is playing but the local user isn't yet.
 	// Based purely on received WS events — no reliance on browser error signals.
 	let outOfSync = $derived.by(() => {
@@ -205,6 +209,34 @@
 		return () => {
 			if (ws) ws.close();
 			if (timerInterval) clearInterval(timerInterval);
+			if (mediaPoller) clearInterval(mediaPoller);
+		};
+	});
+
+	// Poll media download status while session is pending or active
+	$effect(() => {
+		if (!authVal?.token || !session) return;
+		if (session.status === 'finished') return;
+
+		async function fetchMediaStatus() {
+			try {
+				const statuses = await api(`/api/sessions/${session.id}/media`, { token: authVal.token });
+				mediaStatus = statuses;
+				// Stop polling once everything is resolved
+				const pending = Object.values(statuses).some((s) => s === 'pending');
+				if (!pending && mediaPoller) {
+					clearInterval(mediaPoller);
+					mediaPoller = null;
+				}
+			} catch { /* ignore */ }
+		}
+
+		fetchMediaStatus();
+		if (mediaPoller) clearInterval(mediaPoller);
+		mediaPoller = setInterval(fetchMediaStatus, 2000);
+
+		return () => {
+			if (mediaPoller) { clearInterval(mediaPoller); mediaPoller = null; }
 		};
 	});
 
@@ -502,8 +534,22 @@
 								allowfullscreen
 								class="embed-frame"
 							></iframe>
+						{:else if embed.type === 'tiktok' && mediaStatus[String(sm.meme.id)] === 'ready'}
+							<div class="sync-media-wrap">
+								<!-- Local download — plain <video> bypasses all autoplay/iframe restrictions -->
+								<video
+									src="/api/sessions/{session.id}/media/{sm.meme.id}?token={authVal.token}"
+									autoplay
+									controls
+									loop
+									class="embed-frame tiktok-frame local-video"
+								></video>
+							</div>
 						{:else if embed.type === 'tiktok' && embed.embedUrl}
 							<div class="sync-media-wrap">
+								{#if mediaStatus[String(sm.meme.id)] === 'pending'}
+									<div class="media-loading">⏬ Cargando vídeo local…</div>
+								{/if}
 								<iframe
 									src={embed.embedUrl}
 									title="TikTok"
@@ -519,8 +565,20 @@
 								allowfullscreen
 								class="embed-frame instagram-frame"
 							></iframe>
+						{:else if embed.type === 'twitter' && mediaStatus[String(sm.meme.id)] === 'ready'}
+							<div class="sync-media-wrap">
+								<video
+									src="/api/sessions/{session.id}/media/{sm.meme.id}?token={authVal.token}"
+									autoplay
+									controls
+									class="embed-frame local-video"
+								></video>
+							</div>
 						{:else if embed.type === 'twitter'}
 							<div class="sync-media-wrap">
+								{#if mediaStatus[String(sm.meme.id)] === 'pending'}
+									<div class="media-loading">⏬ Cargando vídeo local…</div>
+								{/if}
 								{#if twitterEmbeds[sm.meme.id]}
 									<!-- eslint-disable-next-line svelte/no-at-html-tags -->
 									<div class="twitter-embed-wrap" use:tweetWidget>{@html twitterEmbeds[sm.meme.id]}</div>
@@ -914,6 +972,18 @@
 	.sync-media-wrap {
 		position: relative;
 		width: 100%;
+	}
+
+	.local-video {
+		background: #000;
+	}
+
+	.media-loading {
+		font-size: 0.8rem;
+		color: var(--text-muted);
+		text-align: center;
+		padding: 0.3rem 0;
+		animation: fadeIn 0.3s;
 	}
 	.out-of-sync-hint {
 		font-size: 0.82rem;

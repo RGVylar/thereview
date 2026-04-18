@@ -17,6 +17,12 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
 
 
+class MediaStatus(str, enum.Enum):
+    PENDING = "pending"
+    READY = "ready"
+    FAILED = "failed"
+
+
 class User(Base):
     __tablename__ = "users"
 
@@ -77,6 +83,8 @@ class Session(Base):
     )
     meme_limit: Mapped[int | None] = mapped_column(Integer, nullable=True, default=None)
     mix_mode: Mapped[str] = mapped_column(String(20), nullable=False, default="shuffle")
+    # Highest meme index the session has reached — used to mark only viewed memes as reviewed
+    current_position: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
     creator: Mapped["User"] = relationship()
     participants: Mapped[list["SessionUser"]] = relationship(
@@ -137,4 +145,22 @@ class Vote(Base):
 
     __table_args__ = (
         UniqueConstraint("user_id", "meme_id", "session_id", name="uq_user_meme_session_vote"),
+    )
+
+
+class MediaCache(Base):
+    """Tracks yt-dlp download state for each TikTok/Twitter meme in a session."""
+
+    __tablename__ = "media_cache"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    session_id: Mapped[int] = mapped_column(ForeignKey("sessions.id", ondelete="CASCADE"), nullable=False)
+    meme_id: Mapped[int] = mapped_column(ForeignKey("memes.id", ondelete="CASCADE"), nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default=MediaStatus.PENDING
+    )  # pending | ready | failed
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("session_id", "meme_id", name="uq_media_session_meme"),
     )
