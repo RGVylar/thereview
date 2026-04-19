@@ -612,7 +612,7 @@
 								src={embed.embedUrl}
 								title="YouTube"
 								allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope"
-								allowfullscreen
+								allowfullscreen={true}
 								class="embed-frame"
 							></iframe>
 						{:else if embed.type === 'tiktok' && mediaStatus[String(sm.meme.id)] === 'ready'}
@@ -634,7 +634,7 @@
 									src={embed.embedUrl}
 									title="TikTok"
 									allow="autoplay; fullscreen; encrypted-media"
-									allowfullscreen
+									allowfullscreen={true}
 									class="embed-frame tiktok-frame"
 								></iframe>
 							</div>
@@ -642,7 +642,7 @@
 							<iframe
 								src={embed.embedUrl}
 								title="Instagram"
-								allowfullscreen
+								allowfullscreen={true}
 								class="embed-frame instagram-frame"
 							></iframe>
 						{:else if embed.type === 'twitter' && mediaStatus[String(sm.meme.id)] === 'ready'}
