@@ -233,13 +233,23 @@
 		timerInterval = setInterval(tick, 1000);
 	}
 
+	let _wsReconnectTimer = null;
+	let _wsConnecting = false; // guard against duplicate connections
+
 	function connectWs(sessionId, token) {
-		if (ws) ws.close();
+		// Avoid opening a second socket while one is already connecting/open
+		if (_wsConnecting) return;
+		if (ws && ws.readyState === WebSocket.OPEN) return;
+		if (ws) { ws.close(); ws = null; }
+		_wsConnecting = true;
+		if (_wsReconnectTimer) { clearTimeout(_wsReconnectTimer); _wsReconnectTimer = null; }
+
 		const proto = location.protocol === 'https:' ? 'wss' : 'ws';
 		const url = `${proto}://${location.host}/api/sessions/${sessionId}/ws?token=${encodeURIComponent(token)}`;
 		const socket = new WebSocket(url);
 
 		socket.onopen = () => {
+			_wsConnecting = false;
 			syncMessage = '';
 			// Tell the extension which session we joined so it can route video events
 			window.postMessage({ type: 'THEREVIEW_JOIN_SYNC', sessionId }, '*');
@@ -371,11 +381,20 @@
 		};
 
 		socket.onclose = () => {
+			_wsConnecting = false;
 			ws = null;
 			window.postMessage({ type: 'THEREVIEW_LEAVE_SYNC' }, '*');
 			if (extPlaybackHandler) {
 				window.removeEventListener('message', extPlaybackHandler);
 				extPlaybackHandler = null;
+			}
+			// Auto-reconnect if session is still active/pending
+			if (session && session.status !== 'finished') {
+				_wsReconnectTimer = setTimeout(() => {
+					if (!ws && session && session.status !== 'finished') {
+						connectWs(sessionId, token);
+					}
+				}, 2000);
 			}
 		};
 
@@ -402,6 +421,7 @@
 		loadSession();
 
 		return () => {
+			if (_wsReconnectTimer) clearTimeout(_wsReconnectTimer);
 			if (ws) ws.close();
 			if (timerInterval) clearInterval(timerInterval);
 			if (mediaPoller) clearInterval(mediaPoller);
