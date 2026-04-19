@@ -207,6 +207,12 @@ async def session_ws(websocket: WebSocket, session_id: int, token: str = Query(.
                     {"type": "fun_tap", "emoji": msg.get("emoji", "👋"), "user": display_name},
                 )
 
+            elif msg_type == "show_ranking":
+                await _broadcast(
+                    session_id,
+                    {"type": "show_ranking", "user": display_name},
+                )
+
             elif msg_type == "playback_state":
                 await _broadcast(
                     session_id,
