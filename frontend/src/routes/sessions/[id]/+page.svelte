@@ -44,6 +44,9 @@
 	let mediaStatus = $state({});
 	let mediaPoller = null;
 	let dlLiveProgress = $state(null); // real-time {downloaded_bytes, total_bytes, speed_bps, active_count}
+	let dlStartedAt = $state(null);   // Date when downloads started
+	let dlElapsed = $state(0);        // seconds elapsed
+	let dlElapsedTimer = null;
 
 	// Download progress derived from mediaStatus (excludes _progress key)
 	let dlTotal   = $derived(Object.keys(mediaStatus).filter(k => k !== '_progress').length);
@@ -52,6 +55,23 @@
 	let dlPending = $derived(Object.values(mediaStatus).filter(s => s === 'pending').length);
 	let dlSettled = $derived(dlTotal > 0 && dlPending === 0);
 	let dlPct     = $derived(dlTotal > 0 ? Math.round(((dlReady + dlFailed) / dlTotal) * 100) : 0);
+
+	// Estimated time remaining based on current speed and remaining bytes
+	let dlEta = $derived(() => {
+		const p = dlLiveProgress;
+		if (!p || p.speed_bps <= 0 || p.total_bytes <= 0) return null;
+		const remaining = p.total_bytes - p.downloaded_bytes;
+		if (remaining <= 0) return null;
+		const secs = Math.round(remaining / p.speed_bps);
+		if (secs < 60) return `~${secs}s`;
+		return `~${Math.ceil(secs / 60)}min`;
+	});
+
+	function formatElapsed(secs) {
+		const m = Math.floor(secs / 60);
+		const s = secs % 60;
+		return m > 0 ? `${m}m ${s}s` : `${s}s`;
+	}
 
 	function formatBytes(bytes) {
 		if (!bytes || bytes <= 0) return '0 MB';
@@ -350,12 +370,23 @@
 				// eslint-disable-next-line no-unused-vars
 				const { _progress, ...statuses } = raw;
 				mediaStatus = statuses;
+
+				// Start elapsed timer on first active download
+				if (raw._progress && !dlStartedAt) {
+					dlStartedAt = Date.now();
+					if (dlElapsedTimer) clearInterval(dlElapsedTimer);
+					dlElapsedTimer = setInterval(() => {
+						dlElapsed = Math.floor((Date.now() - dlStartedAt) / 1000);
+					}, 1000);
+				}
+
 				// Stop polling once everything is resolved
 				const pending = Object.values(statuses).some((s) => s === 'pending');
 				if (!pending && mediaPoller) {
 					clearInterval(mediaPoller);
 					mediaPoller = null;
 					dlLiveProgress = null;
+					if (dlElapsedTimer) { clearInterval(dlElapsedTimer); dlElapsedTimer = null; }
 				}
 			} catch { /* ignore */ }
 		}
@@ -492,6 +523,16 @@
 			ranking = await api(`/api/sessions/${session.id}/votes/ranking`, { token: authVal.token });
 			view = 'ranking';
 			if (timerInterval) clearInterval(timerInterval);
+		} catch (e) {
+			error = e.message;
+		}
+	}
+
+	async function cancelSession() {
+		if (!confirm('¿Cancelar y borrar esta sesión?')) return;
+		try {
+			await api(`/api/sessions/${session.id}`, { method: 'DELETE', token: authVal.token });
+			window.location.href = '/';
 		} catch (e) {
 			error = e.message;
 		}
@@ -694,6 +735,12 @@
 							{#if dlLiveProgress?.active_count > 0}
 								<span class="dl-stat">{dlLiveProgress.active_count} en curso</span>
 							{/if}
+							{#if dlElapsed > 0}
+								<span class="dl-stat">⏱ {formatElapsed(dlElapsed)}</span>
+							{/if}
+							{#if dlEta()}
+								<span class="dl-stat dl-eta">ETA {dlEta()}</span>
+							{/if}
 						</div>
 						{#if dlFailed > 0}
 							<p class="dl-progress-sub"><span class="dl-failed">{dlFailed} no disponibles</span></p>
@@ -720,6 +767,13 @@
 							{/each}
 						</div>
 					</div>
+				{/if}
+
+				<!-- Cancel session — only creator, only during pending -->
+				{#if session.created_by === authVal.user?.id}
+					<button class="btn-cancel-session" onclick={cancelSession}>
+						🗑 Cancelar sesión
+					</button>
 				{/if}
 			</div>
 		{/if}
@@ -841,19 +895,28 @@
 						{/key}
 
 						<div class="voting">
-							<p class="vote-label">Tu voto:</p>
-						<div class="vote-buttons">
-							{#each [1, 2, 3, 4, 5] as val}
-								<button
-									class="vote-btn"
-									class:active={myVote?.value === val}
-									onclick={() => castVote(sm.meme.id, val)}
-								>
-									{val}
-								</button>
-							{/each}
+							<div class="vote-buttons">
+								{#each [[1,'💀'],[2,'😐'],[3,'😄'],[4,'🔥'],[5,'💯']] as [val, emoji]}
+									<button
+										class="vote-btn"
+										class:active={myVote?.value === val}
+										onclick={() => castVote(sm.meme.id, val)}
+										title={val + '/5'}
+									>
+										{emoji}
+									</button>
+								{/each}
+							</div>
+							<p class="vote-total">Puntuación: {getMemeVoteTotal(sm.meme.id)}</p>
 						</div>
-						<p class="vote-total">Total: {getMemeVoteTotal(sm.meme.id)}</p>
+
+						<!-- Reaction buttons during review -->
+						<div class="fun-buttons-wrap fun-buttons-review">
+							<div class="fun-buttons">
+								{#each FUN_BUTTONS as emoji}
+									<button class="fun-btn fun-btn-sm" onclick={() => sendFunTap(emoji)}>{emoji}</button>
+								{/each}
+							</div>
 						</div>
 					</div>
 
@@ -1211,12 +1274,32 @@
 		to   { box-shadow: 0 0 16px 4px rgba(104, 211, 145, 0.45); }
 	}
 
+	.btn-cancel-session {
+		margin-top: 1.5rem;
+		background: none;
+		border: 1px solid rgba(229,62,62,0.3);
+		color: rgba(229,62,62,0.7);
+		border-radius: 8px;
+		padding: 0.4rem 1rem;
+		font-size: 0.8rem;
+		cursor: pointer;
+		transition: all 0.15s;
+	}
+	.btn-cancel-session:hover {
+		border-color: var(--accent);
+		color: var(--accent);
+		background: rgba(229,62,62,0.08);
+	}
+
 	.fun-buttons-wrap {
 		margin-top: 1.5rem;
 		display: flex;
 		flex-direction: column;
 		align-items: center;
 		gap: 0.5rem;
+	}
+	.fun-buttons-review {
+		margin-top: 0.75rem;
 	}
 	.fun-buttons-label {
 		font-size: 0.8rem;
@@ -1238,6 +1321,11 @@
 		cursor: pointer;
 		transition: transform 0.1s, background 0.1s;
 		line-height: 1;
+	}
+	.fun-btn-sm {
+		font-size: 1.2rem;
+		padding: 0.3rem 0.45rem;
+		border-radius: 10px;
 	}
 	.fun-btn:hover  { background: rgba(255,255,255,0.12); }
 	.fun-btn:active { transform: scale(0.88); }
@@ -1309,8 +1397,11 @@
 		font-variant-numeric: tabular-nums;
 	}
 	.dl-speed {
-		color: #68d391; /* green */
+		color: #68d391;
 		font-weight: 600;
+	}
+	.dl-eta {
+		color: #90cdf4; /* light blue */
 	}
 	.dl-progress-sub {
 		font-size: 0.75rem;
