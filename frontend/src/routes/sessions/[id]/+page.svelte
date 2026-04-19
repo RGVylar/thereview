@@ -619,14 +619,14 @@
 				{:else if dlTotal > 0 && !dlSettled}
 					<!-- Everyone ready — waiting for downloads -->
 					<div class="dl-progress-wrap">
-						<p class="dl-progress-label">
-							⏬ Descargando vídeos… {dlReady + dlFailed}/{dlTotal}
-							{#if dlFailed > 0}<span class="dl-failed">({dlFailed} no disponibles)</span>{/if}
-						</p>
+						<p class="dl-progress-label">⏬ Preparando vídeos… {dlReady + dlFailed}/{dlTotal}</p>
 						<div class="dl-progress-bar">
 							<div class="dl-progress-fill" style="width: {dlPct}%"></div>
 						</div>
-						<p class="dl-progress-sub">La sesión arrancará sola cuando esté todo listo</p>
+						<p class="dl-progress-sub">
+							{dlPct}% · La sesión arrancará sola al terminar
+							{#if dlFailed > 0}&nbsp;·&nbsp;<span class="dl-failed">{dlFailed} no disponibles</span>{/if}
+						</p>
 					</div>
 				{:else if dlTotal === 0}
 					<!-- No downloadable content — start manually (shouldn't usually happen) -->
@@ -1120,41 +1120,48 @@
 	}
 
 	.dl-progress-wrap {
-		margin-top: 1.25rem;
+		margin: 1.5rem auto 0;
 		display: flex;
 		flex-direction: column;
-		gap: 0.5rem;
 		align-items: center;
-		width: 100%;
-		max-width: 340px;
+		gap: 0.6rem;
+		width: min(340px, 90%);
+		background: rgba(255,255,255,0.04);
+		border: 1px solid rgba(255,255,255,0.08);
+		border-radius: 12px;
+		padding: 1.25rem 1.5rem;
 	}
 	.dl-progress-label {
-		font-size: 0.9rem;
-		color: var(--text-muted);
+		font-size: 0.95rem;
+		font-weight: 600;
+		color: var(--text);
 		margin: 0;
+		text-align: center;
 	}
 	.dl-failed {
 		color: var(--accent);
 		font-size: 0.8rem;
+		font-weight: 400;
 	}
 	.dl-progress-bar {
 		width: 100%;
-		height: 8px;
+		height: 10px;
 		background: rgba(255,255,255,0.1);
-		border-radius: 4px;
+		border-radius: 5px;
 		overflow: hidden;
 	}
 	.dl-progress-fill {
 		height: 100%;
 		background: var(--accent);
-		border-radius: 4px;
-		transition: width 0.4s ease;
+		border-radius: 5px;
+		transition: width 0.5s ease;
+		box-shadow: 0 0 8px rgba(229,62,62,0.5);
 	}
 	.dl-progress-sub {
-		font-size: 0.75rem;
+		font-size: 0.78rem;
 		color: var(--text-muted);
-		opacity: 0.7;
 		margin: 0;
+		text-align: center;
 	}
 
 	/* Shared wrapper for sync-capable embeds */
