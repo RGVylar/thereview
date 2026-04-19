@@ -333,9 +333,9 @@ def get_media_status(
     result: dict = {}
     for r in rows:
         entry: dict = {"status": r.status}
-        if r.metadata:
+        if r.dl_metadata:
             try:
-                entry["meta"] = json.loads(r.metadata)
+                entry["meta"] = json.loads(r.dl_metadata)
             except Exception:
                 pass
         result[str(r.meme_id)] = entry

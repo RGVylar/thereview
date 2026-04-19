@@ -163,7 +163,8 @@ class MediaCache(Base):
     )  # pending | ready | failed
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     # JSON blob with yt-dlp extracted metadata (uploader, like_count, view_count, etc.)
-    metadata: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Named dl_metadata because 'metadata' is reserved by SQLAlchemy's Declarative API.
+    dl_metadata: Mapped[str | None] = mapped_column("metadata", Text, nullable=True)
 
     __table_args__ = (
         UniqueConstraint("session_id", "meme_id", name="uq_media_session_meme"),
