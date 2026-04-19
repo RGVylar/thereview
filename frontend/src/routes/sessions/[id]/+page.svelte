@@ -1027,10 +1027,9 @@
 						<div class="podium">
 							<!-- 2nd -->
 							<div class="podium-entry podium-2">
-								{@const podium2src = rankingPreviewSrc(ranking[1])}
 								<a href={ranking[1].url} target="_blank" rel="noopener noreferrer" class="podium-media">
-									{#if podium2src}
-										<img src={podium2src} alt="" class="podium-img" loading="lazy" referrerpolicy="no-referrer" />
+									{#if rankingPreviewSrc(ranking[1])}
+										<img src={rankingPreviewSrc(ranking[1])} alt="" class="podium-img" loading="lazy" referrerpolicy="no-referrer" />
 									{:else}
 										<span class="podium-icon">{typeIcon(detectEmbed(ranking[1].url).type)}</span>
 									{/if}
@@ -1041,10 +1040,9 @@
 							</div>
 							<!-- 1st -->
 							<div class="podium-entry podium-1">
-								{@const podium1src = rankingPreviewSrc(ranking[0])}
 								<a href={ranking[0].url} target="_blank" rel="noopener noreferrer" class="podium-media">
-									{#if podium1src}
-										<img src={podium1src} alt="" class="podium-img" loading="lazy" referrerpolicy="no-referrer" />
+									{#if rankingPreviewSrc(ranking[0])}
+										<img src={rankingPreviewSrc(ranking[0])} alt="" class="podium-img" loading="lazy" referrerpolicy="no-referrer" />
 									{:else}
 										<span class="podium-icon">{typeIcon(detectEmbed(ranking[0].url).type)}</span>
 									{/if}
@@ -1055,10 +1053,9 @@
 							</div>
 							<!-- 3rd -->
 							<div class="podium-entry podium-3">
-								{@const podium3src = rankingPreviewSrc(ranking[2])}
 								<a href={ranking[2].url} target="_blank" rel="noopener noreferrer" class="podium-media">
-									{#if podium3src}
-										<img src={podium3src} alt="" class="podium-img" loading="lazy" referrerpolicy="no-referrer" />
+									{#if rankingPreviewSrc(ranking[2])}
+										<img src={rankingPreviewSrc(ranking[2])} alt="" class="podium-img" loading="lazy" referrerpolicy="no-referrer" />
 									{:else}
 										<span class="podium-icon">{typeIcon(detectEmbed(ranking[2].url).type)}</span>
 									{/if}

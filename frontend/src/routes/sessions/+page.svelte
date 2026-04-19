@@ -3,8 +3,10 @@
 	import { auth } from '$lib/auth.js';
 	import { goto } from '$app/navigation';
 
-	let authVal;
-	auth.subscribe((v) => (authVal = v));
+	let authVal = $state(null);
+	auth.subscribe((v) => {
+		authVal = v;
+	});
 
 	let sessions = $state([]);
 	let showCreate = $state(false);
@@ -111,11 +113,13 @@
 					<input id="meme-limit" type="number" min="1" bind:value={memeLimit} placeholder="∞" />
 				</div>
 				<div class="config-field">
-					<label class="label">Modo de mezcla</label>
-					<div class="mode-toggle">
-						<button class="mode-btn" class:selected={mixMode === 'shuffle'} onclick={() => (mixMode = 'shuffle')}>🔀 Mezclar</button>
-						<button class="mode-btn" class:selected={mixMode === 'batched'} onclick={() => (mixMode = 'batched')}>📦 Por tandas</button>
-					</div>
+					<fieldset class="mix-fieldset">
+						<legend class="label">Modo de mezcla</legend>
+						<div class="mode-toggle">
+							<button type="button" class="mode-btn" class:selected={mixMode === 'shuffle'} onclick={() => (mixMode = 'shuffle')}>🔀 Mezclar</button>
+							<button type="button" class="mode-btn" class:selected={mixMode === 'batched'} onclick={() => (mixMode = 'batched')}>📦 Por tandas</button>
+						</div>
+					</fieldset>
 				</div>
 			</div>
 
@@ -262,6 +266,15 @@
 	}
 	.config-field {
 		flex: 1;
+		display: flex;
+		flex-direction: column;
+		gap: 0.3rem;
+	}
+	.mix-fieldset {
+		border: none;
+		margin: 0;
+		padding: 0;
+		min-width: 0;
 		display: flex;
 		flex-direction: column;
 		gap: 0.3rem;
