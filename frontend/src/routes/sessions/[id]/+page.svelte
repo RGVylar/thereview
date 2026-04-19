@@ -582,6 +582,15 @@
 		);
 	}
 
+	/** Preview image for ranking row / podium: API thumbnail (TikTok/YouTube) or direct image URL. */
+	function rankingPreviewSrc(entry) {
+		if (!entry) return null;
+		if (entry.thumbnail_url) return entry.thumbnail_url;
+		const e = detectEmbed(entry.url);
+		if (e.type === 'image') return entry.url;
+		return null;
+	}
+
 	function currentMeme() {
 		if (!session?.session_memes?.length) return null;
 		return session.session_memes[currentIndex];
@@ -1018,9 +1027,10 @@
 						<div class="podium">
 							<!-- 2nd -->
 							<div class="podium-entry podium-2">
+								{@const podium2src = rankingPreviewSrc(ranking[1])}
 								<a href={ranking[1].url} target="_blank" rel="noopener noreferrer" class="podium-media">
-									{#if detectEmbed(ranking[1].url).type === 'image'}
-										<img src={ranking[1].url} alt="2nd" class="podium-img" />
+									{#if podium2src}
+										<img src={podium2src} alt="" class="podium-img" loading="lazy" referrerpolicy="no-referrer" />
 									{:else}
 										<span class="podium-icon">{typeIcon(detectEmbed(ranking[1].url).type)}</span>
 									{/if}
@@ -1031,9 +1041,10 @@
 							</div>
 							<!-- 1st -->
 							<div class="podium-entry podium-1">
+								{@const podium1src = rankingPreviewSrc(ranking[0])}
 								<a href={ranking[0].url} target="_blank" rel="noopener noreferrer" class="podium-media">
-									{#if detectEmbed(ranking[0].url).type === 'image'}
-										<img src={ranking[0].url} alt="1st" class="podium-img" />
+									{#if podium1src}
+										<img src={podium1src} alt="" class="podium-img" loading="lazy" referrerpolicy="no-referrer" />
 									{:else}
 										<span class="podium-icon">{typeIcon(detectEmbed(ranking[0].url).type)}</span>
 									{/if}
@@ -1044,9 +1055,10 @@
 							</div>
 							<!-- 3rd -->
 							<div class="podium-entry podium-3">
+								{@const podium3src = rankingPreviewSrc(ranking[2])}
 								<a href={ranking[2].url} target="_blank" rel="noopener noreferrer" class="podium-media">
-									{#if detectEmbed(ranking[2].url).type === 'image'}
-										<img src={ranking[2].url} alt="3rd" class="podium-img" />
+									{#if podium3src}
+										<img src={podium3src} alt="" class="podium-img" loading="lazy" referrerpolicy="no-referrer" />
 									{:else}
 										<span class="podium-icon">{typeIcon(detectEmbed(ranking[2].url).type)}</span>
 									{/if}
@@ -1066,13 +1078,14 @@
 							{@const pct = Math.round(avg / totalMemes * 100)}
 							{@const barPct = Math.round(entry.total_score / maxScore * 100)}
 							{@const myVoteHere = votes.find(v => v.meme_id === entry.meme_id && v.user_id === authVal.user?.id)}
+							{@const previewSrc = rankingPreviewSrc(entry)}
 							<div class="ranking-row" class:top3={i < 3}>
 								<div class="ranking-pos">
 									{i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i+1}`}
 								</div>
 								<a href={entry.url} target="_blank" rel="noopener noreferrer" class="ranking-type-icon" title={entry.url}>
-									{#if embed.type === 'image'}
-										<img src={entry.url} alt="" class="ranking-thumb" />
+									{#if previewSrc}
+										<img src={previewSrc} alt="" class="ranking-thumb" loading="lazy" referrerpolicy="no-referrer" />
 									{:else}
 										{typeIcon(embed.type)}
 									{/if}

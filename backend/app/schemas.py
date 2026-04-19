@@ -142,3 +142,4 @@ class RankingEntry(BaseModel):
     submitted_by: str
     total_score: int
     vote_count: int
+    thumbnail_url: str | None = None

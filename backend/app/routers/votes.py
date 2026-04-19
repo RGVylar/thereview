@@ -6,6 +6,7 @@ from app.auth import get_current_user
 from app.database import get_db
 from app.models import Meme, Session, SessionMeme, SessionStatus, SessionUser, User, Vote
 from app.schemas import RankingEntry, VoteCreate, VoteOut
+from app.thumbnails import batch_embed_thumbnails
 
 router = APIRouter(prefix="/api/sessions/{session_id}/votes", tags=["votes"])
 
@@ -114,6 +115,9 @@ def get_ranking(
         .all()
     )
 
+    urls = [r.url for r in results]
+    thumbs = batch_embed_thumbnails(urls)
+
     return [
         RankingEntry(
             meme_id=r.meme_id,
@@ -121,6 +125,7 @@ def get_ranking(
             submitted_by=r.submitted_by,
             total_score=r.total_score,
             vote_count=r.vote_count,
+            thumbnail_url=thumbs.get(r.url),
         )
         for r in results
     ]

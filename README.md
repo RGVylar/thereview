@@ -113,6 +113,7 @@ Luego configurar Cloudflare Tunnel apuntando al puerto de Caddy.
 
 ## Useful commands
 ```
+clear
 pct exec 201 -- bash -lc '
   cd /opt/thereview &&
   sudo -u thereview git pull &&
