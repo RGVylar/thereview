@@ -88,6 +88,8 @@ def download_and_update(session_id: int, meme_id: int, url: str) -> None:
     """Download *url* and update MediaCache. Runs in a background thread."""
     from app.models import MediaCache
 
+    print(f"[DL] Starting download: session={session_id}, meme={meme_id}, url={url}")
+
     out = media_path(session_id, meme_id)
     out.parent.mkdir(parents=True, exist_ok=True)
 
@@ -124,12 +126,12 @@ def download_and_update(session_id: int, meme_id: int, url: str) -> None:
         else:
             cache.status = "failed"
             cache.error = "yt-dlp produced no output file"
-            logger.warning("yt-dlp no output [session=%s meme=%s]", session_id, meme_id)
+            print(f"[DL] yt-dlp no output [session={session_id} meme={meme_id}]")
         db.commit()
 
     except Exception as exc:
         error_msg = str(exc)[:500]
-        logger.warning("yt-dlp failed [session=%s meme=%s]: %s", session_id, meme_id, error_msg)
+        print(f"[DL] yt-dlp failed [session={session_id} meme={meme_id}]: {error_msg}")
         try:
             cache = db.query(MediaCache).filter_by(session_id=session_id, meme_id=meme_id).first()
             if cache:
