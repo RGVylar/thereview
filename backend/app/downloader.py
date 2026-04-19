@@ -59,6 +59,14 @@ def download_and_update(session_id: int, meme_id: int, url: str) -> None:
 
         _run_ytdlp(out, url)
 
+        # Re-fetch cache row — session may have been deleted while we were downloading
+        cache = db.query(MediaCache).filter_by(session_id=session_id, meme_id=meme_id).first()
+        if not cache:
+            # Session was deleted mid-download — remove any file we just wrote
+            if out.exists():
+                out.unlink(missing_ok=True)
+            return
+
         if out.exists():
             cache.status = "ready"
         else:
