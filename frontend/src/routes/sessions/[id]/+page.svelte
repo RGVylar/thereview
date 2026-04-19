@@ -258,7 +258,7 @@
 			window.addEventListener('message', extPlaybackHandler);
 		};
 
-		socket.onmessage = (event) => {
+		socket.onmessage = async (event) => {
 			try {
 				const msg = JSON.parse(event.data);
 				if (msg.type === 'start') {
