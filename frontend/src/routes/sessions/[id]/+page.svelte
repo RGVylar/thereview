@@ -4,6 +4,7 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { detectEmbed } from '$lib/embed.js';
+	import monkeySoundUrl from '../../../monkey.ogg?url';
 
 	let authVal;
 	auth.subscribe((v) => (authVal = v));
@@ -492,29 +493,15 @@
 		spawnEmoji(emoji, authVal?.user?.display_name ?? '');
 	}
 
+	let monkeyAudio = null;
 	function playMonkeySound() {
 		try {
-			const ctx = new AudioContext();
-			// "ooh ooh aah aah" — rapid sawtooth frequency sweeps
-			[
-				{ t: 0,    f: 900,  fEnd: 580, dur: 0.13 },
-				{ t: 0.14, f: 860,  fEnd: 540, dur: 0.13 },
-				{ t: 0.28, f: 1100, fEnd: 720, dur: 0.16 },
-				{ t: 0.45, f: 980,  fEnd: 620, dur: 0.13 },
-				{ t: 0.59, f: 1250, fEnd: 820, dur: 0.19 },
-			].forEach(({ t, f, fEnd, dur }) => {
-				const osc = ctx.createOscillator();
-				const gain = ctx.createGain();
-				osc.connect(gain); gain.connect(ctx.destination);
-				osc.type = 'sawtooth';
-				osc.frequency.setValueAtTime(f, ctx.currentTime + t);
-				osc.frequency.exponentialRampToValueAtTime(fEnd, ctx.currentTime + t + dur);
-				gain.gain.setValueAtTime(0.18, ctx.currentTime + t);
-				gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + t + dur);
-				osc.start(ctx.currentTime + t);
-				osc.stop(ctx.currentTime + t + dur + 0.02);
-			});
-		} catch { /* ignore */ }
+			if (!monkeyAudio) monkeyAudio = new Audio(monkeySoundUrl);
+			monkeyAudio.currentTime = 0;
+			monkeyAudio.play().catch(() => {});
+		} catch {
+			/* ignore */
+		}
 	}
 
 	function spawnEmoji(emoji, user) {
