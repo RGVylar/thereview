@@ -44,6 +44,82 @@
 	let mediaStatus = $state({});
 	let mediaPoller = null;
 
+	// Reference to the currently mounted local <video> element (if any).
+	// Managed by the localVideoSync Svelte action.
+	let localVideoEl = null;
+
+	/**
+	 * Svelte action for local <video> elements (served from our own backend).
+	 * Handles:
+	 *   • Autoplay with sound (muted→play→unmute fallback when gesture is stale)
+	 *   • Sending play/pause/seek events directly to the WebSocket
+	 *   • Receiving remote commands from the WS handler
+	 */
+	function localVideoSync(node) {
+		localVideoEl = node;
+		let suppressed = false; // true while we are applying a remote command
+
+		// ── Autoplay ──────────────────────────────────────────────────────────
+		node.play().catch(() => {
+			// Browser blocked unmuted autoplay → play muted first, then unmute.
+			// Once a video is playing (even muted), setting muted=false is always allowed.
+			node.muted = true;
+			node.play()
+				.then(() => { node.muted = false; })
+				.catch(() => { node.muted = false; });
+		});
+
+		// ── Local → WS ────────────────────────────────────────────────────────
+		function sendPlayback(action) {
+			if (suppressed) return;
+			const uid = authVal?.user?.id;
+			if (uid) {
+				playbackStates = { ...playbackStates, [uid]: { playing: !node.paused, currentTime: node.currentTime } };
+			}
+			if (ws?.readyState === WebSocket.OPEN) {
+				ws.send(JSON.stringify({ type: 'playback', action, currentTime: node.currentTime }));
+			}
+			if (ws?.readyState === WebSocket.OPEN) {
+				ws.send(JSON.stringify({ type: 'playback_state', playing: !node.paused, currentTime: node.currentTime }));
+			}
+		}
+
+		const onPlay   = () => sendPlayback('play');
+		const onPause  = () => sendPlayback('pause');
+		const onSeeked = () => sendPlayback('seek');
+
+		node.addEventListener('play',   onPlay);
+		node.addEventListener('pause',  onPause);
+		node.addEventListener('seeked', onSeeked);
+
+		// ── Remote → video ────────────────────────────────────────────────────
+		node._applyRemote = ({ action, currentTime }) => {
+			suppressed = true;
+			if (typeof currentTime === 'number' && Math.abs(node.currentTime - currentTime) > 0.5) {
+				node.currentTime = currentTime;
+			}
+			if (action === 'play') {
+				node.play().catch(() => {
+					node.muted = true;
+					node.play().then(() => { node.muted = false; }).catch(() => {});
+				});
+			} else if (action === 'pause') {
+				node.pause();
+			}
+			setTimeout(() => { suppressed = false; }, 300);
+		};
+
+		return {
+			destroy() {
+				node.removeEventListener('play',   onPlay);
+				node.removeEventListener('pause',  onPause);
+				node.removeEventListener('seeked', onSeeked);
+				delete node._applyRemote;
+				if (localVideoEl === node) localVideoEl = null;
+			}
+		};
+	}
+
 	// True when someone else is playing but the local user isn't yet.
 	// Based purely on received WS events — no reliance on browser error signals.
 	let outOfSync = $derived.by(() => {
@@ -151,15 +227,20 @@
 				} else if (msg.type === 'play_sync') {
 					// legacy — absorbed by playback system
 				} else if (msg.type === 'playback') {
-					// Relay remote playback command to the embed iframe
-					try {
-						const iframe = document.querySelector('.sync-media-wrap iframe');
-						if (iframe?.contentWindow) {
-							iframe.contentWindow.postMessage({ type: 'THEREVIEW_PLAYBACK_REMOTE', action: msg.action, currentTime: msg.currentTime }, '*');
-						} else {
-							window.postMessage({ type: 'THEREVIEW_PLAYBACK_REMOTE', action: msg.action, currentTime: msg.currentTime }, '*');
-						}
-					} catch (e) {}
+					// Local <video> (downloaded): control directly
+					if (localVideoEl?._applyRemote) {
+						localVideoEl._applyRemote({ action: msg.action, currentTime: msg.currentTime });
+					} else {
+						// Embedded iframe (TikTok/Twitter not yet downloaded): relay via postMessage
+						try {
+							const iframe = document.querySelector('.sync-media-wrap iframe');
+							if (iframe?.contentWindow) {
+								iframe.contentWindow.postMessage({ type: 'THEREVIEW_PLAYBACK_REMOTE', action: msg.action, currentTime: msg.currentTime }, '*');
+							} else {
+								window.postMessage({ type: 'THEREVIEW_PLAYBACK_REMOTE', action: msg.action, currentTime: msg.currentTime }, '*');
+							}
+						} catch (e) {}
+					}
 				} else if (msg.type === 'playback_state') {
 					if (msg.user_id) {
 						playbackStates = {
@@ -539,10 +620,9 @@
 								<!-- Local download — plain <video> bypasses all autoplay/iframe restrictions -->
 								<video
 									src="/api/sessions/{session.id}/media/{sm.meme.id}?token={authVal.token}"
-									autoplay
 									controls
-									loop
 									class="embed-frame tiktok-frame local-video"
+									use:localVideoSync
 								></video>
 							</div>
 						{:else if embed.type === 'tiktok' && embed.embedUrl}
@@ -569,9 +649,9 @@
 							<div class="sync-media-wrap">
 								<video
 									src="/api/sessions/{session.id}/media/{sm.meme.id}?token={authVal.token}"
-									autoplay
 									controls
 									class="embed-frame local-video"
+									use:localVideoSync
 								></video>
 							</div>
 						{:else if embed.type === 'twitter'}
