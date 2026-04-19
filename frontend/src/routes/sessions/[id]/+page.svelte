@@ -266,6 +266,8 @@
 					if (!readyUserIds.includes(msg.user_id)) {
 						readyUserIds = [...readyUserIds, msg.user_id];
 					}
+				} else if (msg.type === 'fun_tap') {
+					spawnEmoji(msg.emoji, msg.user);
 				} else if (msg.type === 'play_sync') {
 					// legacy — absorbed by playback system
 				} else if (msg.type === 'playback') {
@@ -412,18 +414,56 @@
 		}
 	});
 
-	// Auto-start when all participants ready AND all downloads settled
-	let _autoStarted = false;
+	// Play a sound + update UI when downloads finish (don't auto-start)
+	let dlNotified = false;
 	$effect(() => {
-		if (_autoStarted) return;
+		if (dlNotified) return;
 		if (!session || session.status !== 'pending') return;
-		if (!authVal?.user?.id || session.created_by !== authVal.user.id) return;
 		const allReady = readyUserIds.length >= session.participants.length;
-		if (!allReady) return;
-		if (dlTotal === 0 || !dlSettled) return; // wait for downloads
-		_autoStarted = true;
-		startSession();
+		if (!allReady || !dlSettled || dlTotal === 0) return;
+		dlNotified = true;
+		playDoneSound();
 	});
+
+	function playDoneSound() {
+		try {
+			const ctx = new AudioContext();
+			[[523, 0], [659, 0.18], [784, 0.36]].forEach(([freq, delay]) => {
+				const osc = ctx.createOscillator();
+				const gain = ctx.createGain();
+				osc.connect(gain);
+				gain.connect(ctx.destination);
+				osc.type = 'sine';
+				osc.frequency.value = freq;
+				gain.gain.setValueAtTime(0, ctx.currentTime + delay);
+				gain.gain.linearRampToValueAtTime(0.25, ctx.currentTime + delay + 0.04);
+				gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + delay + 0.35);
+				osc.start(ctx.currentTime + delay);
+				osc.stop(ctx.currentTime + delay + 0.4);
+			});
+		} catch { /* AudioContext not available */ }
+	}
+
+	// Fun tap buttons — shown while waiting during download
+	const FUN_BUTTONS = ['🔔','🎉','💩','👋','🍿','💀'];
+	let floatingEmojis = $state([]); // [{id, emoji, x, user}]
+	let _emojiId = 0;
+
+	function sendFunTap(emoji) {
+		if (ws?.readyState === WebSocket.OPEN) {
+			ws.send(JSON.stringify({ type: 'fun_tap', emoji }));
+		}
+		spawnEmoji(emoji, authVal?.user?.display_name ?? '');
+	}
+
+	function spawnEmoji(emoji, user) {
+		const id = ++_emojiId;
+		const x = 10 + Math.random() * 80; // % from left
+		floatingEmojis = [...floatingEmojis, { id, emoji, x, user }];
+		setTimeout(() => {
+			floatingEmojis = floatingEmojis.filter(e => e.id !== id);
+		}, 1800);
+	}
 
 	async function startSession() {
 		try {
@@ -653,26 +693,39 @@
 								<span class="dl-stat">{dlLiveProgress.active_count} activos</span>
 							{/if}
 						</div>
-						<p class="dl-progress-sub">
-							La sesión arrancará sola al terminar
-							{#if dlFailed > 0}&nbsp;·&nbsp;<span class="dl-failed">{dlFailed} no disponibles</span>{/if}
-						</p>
+						{#if dlFailed > 0}
+							<p class="dl-progress-sub"><span class="dl-failed">{dlFailed} no disponibles</span></p>
+						{/if}
 					</div>
-				{:else if dlTotal === 0}
-					<!-- No downloadable content — start manually (shouldn't usually happen) -->
+				{:else if dlSettled || dlTotal === 0}
+					<!-- Downloads done — manual start -->
 					{#if session.created_by === authVal.user?.id}
-						<button class="btn-primary big-btn start-btn" onclick={startSession}>
-							▶️ ¡Todos listos! Iniciar
+						<button class="btn-primary big-btn start-btn start-ready-btn" onclick={startSession}>
+							🎬 ¡Todo listo! Empezar
 						</button>
 					{:else}
-						<p class="ready-msg">Esperando a que el anfitrión inicie…</p>
+						<p class="ready-msg">✅ Listo · Esperando al anfitrión…</p>
 					{/if}
-				{:else}
-					<!-- Downloads settled, auto-start triggered -->
-					<p class="ready-msg">🚀 Arrancando…</p>
+				{/if}
+
+				<!-- Fun buttons — visible while everyone is ready (downloading or not) -->
+				{#if readyUserIds.length >= session.participants.length && session.status === 'pending'}
+					<div class="fun-buttons-wrap">
+						<p class="fun-buttons-label">Mientras esperáis… 👇</p>
+						<div class="fun-buttons">
+							{#each FUN_BUTTONS as emoji}
+								<button class="fun-btn" onclick={() => sendFunTap(emoji)}>{emoji}</button>
+							{/each}
+						</div>
+					</div>
 				{/if}
 			</div>
 		{/if}
+
+		<!-- Floating emoji overlay (fun tap reactions) -->
+		{#each floatingEmojis as fe (fe.id)}
+			<div class="floating-emoji" style="left: {fe.x}%">{fe.emoji}</div>
+		{/each}
 
 		<!-- ACTIVE: presentation mode -->
 		{#if session.status === 'active' && view === 'presentation'}
@@ -1147,6 +1200,60 @@
 	}
 	.start-btn {
 		margin-top: 0.75rem;
+	}
+	.start-ready-btn {
+		animation: pulse-green 1s ease-in-out infinite alternate;
+	}
+	@keyframes pulse-green {
+		from { box-shadow: 0 0 0 0 rgba(104, 211, 145, 0); }
+		to   { box-shadow: 0 0 16px 4px rgba(104, 211, 145, 0.45); }
+	}
+
+	.fun-buttons-wrap {
+		margin-top: 1.5rem;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 0.5rem;
+	}
+	.fun-buttons-label {
+		font-size: 0.8rem;
+		color: var(--text-muted);
+		margin: 0;
+	}
+	.fun-buttons {
+		display: flex;
+		gap: 0.5rem;
+		flex-wrap: wrap;
+		justify-content: center;
+	}
+	.fun-btn {
+		font-size: 1.6rem;
+		background: rgba(255,255,255,0.06);
+		border: 1px solid rgba(255,255,255,0.1);
+		border-radius: 12px;
+		padding: 0.4rem 0.6rem;
+		cursor: pointer;
+		transition: transform 0.1s, background 0.1s;
+		line-height: 1;
+	}
+	.fun-btn:hover  { background: rgba(255,255,255,0.12); }
+	.fun-btn:active { transform: scale(0.88); }
+
+	.floating-emoji {
+		position: fixed;
+		bottom: 12%;
+		font-size: 2.8rem;
+		pointer-events: none;
+		z-index: 9999;
+		animation: float-up 1.8s ease-out forwards;
+		transform: translateX(-50%);
+		filter: drop-shadow(0 2px 6px rgba(0,0,0,0.5));
+	}
+	@keyframes float-up {
+		0%   { opacity: 1;   transform: translateX(-50%) translateY(0)     scale(1); }
+		60%  { opacity: 1;   transform: translateX(-50%) translateY(-120px) scale(1.2); }
+		100% { opacity: 0;   transform: translateX(-50%) translateY(-220px) scale(0.8); }
 	}
 
 	.dl-progress-wrap {

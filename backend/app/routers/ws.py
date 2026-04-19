@@ -201,6 +201,12 @@ async def session_ws(websocket: WebSocket, session_id: int, token: str = Query(.
                     exclude_uid=user_id,  # don't echo back to sender
                 )
 
+            elif msg_type == "fun_tap":
+                await _broadcast(
+                    session_id,
+                    {"type": "fun_tap", "emoji": msg.get("emoji", "👋"), "user": display_name},
+                )
+
             elif msg_type == "playback_state":
                 await _broadcast(
                     session_id,
