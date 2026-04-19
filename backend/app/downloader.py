@@ -2,11 +2,12 @@
 Media downloader — uses yt-dlp Python API to fetch TikTok and Twitter/X
 videos server-side so they can be served as plain <video> elements.
 
-Optimisations vs subprocess approach:
+Optimisations:
   • yt-dlp imported once per process — no per-download Python startup cost
   • Max 480p — keeps file sizes small (TikTok looks fine at 480p)
-  • Global semaphore — caps concurrent downloads at 4 to avoid bandwidth
-    contention and rate-limiting
+  • Global semaphore — caps concurrent downloads at 6
+  • 4 parallel HTTP fragments per video
+  • In-memory progress tracking via yt-dlp progress hooks
 """
 from __future__ import annotations
 
@@ -15,6 +16,7 @@ import re
 import shutil
 import threading
 from pathlib import Path
+from typing import TypedDict
 
 from app.database import SessionLocal
 
@@ -27,8 +29,51 @@ _DOWNLOADABLE = re.compile(
     re.IGNORECASE,
 )
 
-# Max 6 concurrent yt-dlp downloads (LXC has 2 GB RAM, plenty of headroom)
+# Max 6 concurrent yt-dlp downloads
 _DL_SEMAPHORE = threading.Semaphore(6)
+
+# In-memory progress: (session_id, meme_id) -> {downloaded, total, speed}
+_progress_lock = threading.Lock()
+_download_progress: dict[tuple[int, int], dict] = {}
+
+
+class SessionProgress(TypedDict):
+    downloaded_bytes: int
+    total_bytes: int
+    speed_bps: float
+    active_count: int
+
+
+def get_session_progress(session_id: int) -> SessionProgress | None:
+    """Return aggregate download progress for all active downloads in a session."""
+    with _progress_lock:
+        relevant = {k: v for k, v in _download_progress.items() if k[0] == session_id}
+    if not relevant:
+        return None
+    return SessionProgress(
+        downloaded_bytes=sum(v["downloaded"] for v in relevant.values()),
+        total_bytes=sum(v["total"] for v in relevant.values()),
+        speed_bps=sum(v["speed"] for v in relevant.values()),
+        active_count=len(relevant),
+    )
+
+
+def _make_progress_hook(session_id: int, meme_id: int):
+    key = (session_id, meme_id)
+
+    def hook(d: dict) -> None:
+        if d["status"] == "downloading":
+            with _progress_lock:
+                _download_progress[key] = {
+                    "downloaded": d.get("downloaded_bytes") or 0,
+                    "total": d.get("total_bytes") or d.get("total_bytes_estimate") or 0,
+                    "speed": d.get("speed") or 0.0,
+                }
+        elif d["status"] in ("finished", "error"):
+            with _progress_lock:
+                _download_progress.pop(key, None)
+
+    return hook
 
 
 def is_downloadable(url: str) -> bool:
@@ -57,12 +102,11 @@ def download_and_update(session_id: int, meme_id: int, url: str) -> None:
             db.commit()
             return
 
-        _run_ytdlp(out, url)
+        _run_ytdlp(out, url, session_id, meme_id)
 
-        # Re-fetch cache row — session may have been deleted while we were downloading
+        # Re-fetch — session may have been deleted while downloading
         cache = db.query(MediaCache).filter_by(session_id=session_id, meme_id=meme_id).first()
         if not cache:
-            # Session was deleted mid-download — remove any file we just wrote
             if out.exists():
                 out.unlink(missing_ok=True)
             return
@@ -87,10 +131,12 @@ def download_and_update(session_id: int, meme_id: int, url: str) -> None:
         except Exception:
             pass
     finally:
+        with _progress_lock:
+            _download_progress.pop((session_id, meme_id), None)
         db.close()
 
 
-def _run_ytdlp(out: Path, url: str) -> None:
+def _run_ytdlp(out: Path, url: str, session_id: int, meme_id: int) -> None:
     """Run yt-dlp via its Python API (no subprocess overhead)."""
     try:
         import yt_dlp
@@ -103,16 +149,14 @@ def _run_ytdlp(out: Path, url: str) -> None:
             "quiet": True,
             "no_warnings": True,
             "noplaylist": True,
-            # Prefer ≤480p mp4; fall back to any mp4, then anything
             "format": "bestvideo[height<=480][ext=mp4]+bestaudio[ext=m4a]/best[height<=480][ext=mp4]/best[ext=mp4]/best",
             "merge_output_format": "mp4",
             "socket_timeout": 15,
             "retries": 2,
             "fragment_retries": 2,
-            # Download each video in 4 parallel HTTP chunks — biggest speed win
             "concurrent_fragment_downloads": 4,
-            # Skip writing .part temp files
             "nopart": True,
+            "progress_hooks": [_make_progress_hook(session_id, meme_id)],
         }
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             ydl.download([url])

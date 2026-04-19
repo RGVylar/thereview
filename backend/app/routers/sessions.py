@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session as DBSession, joinedload
 
 from app.auth import get_current_user
 from app.database import get_db
-from app.downloader import cleanup_session_media, download_and_update, is_downloadable, media_path
+from app.downloader import cleanup_session_media, download_and_update, get_session_progress, is_downloadable, media_path
 from app.models import MediaCache, Meme, Session, SessionMeme, SessionStatus, SessionUser, User
 from app.schemas import SessionCreate, SessionDetail, SessionOut
 
@@ -273,7 +273,11 @@ def get_media_status(
     _assert_participant(session, current_user.id)
 
     rows = db.query(MediaCache).filter(MediaCache.session_id == session_id).all()
-    return {str(r.meme_id): r.status for r in rows}
+    result: dict = {str(r.meme_id): r.status for r in rows}
+    progress = get_session_progress(session_id)
+    if progress:
+        result["_progress"] = progress
+    return result
 
 
 # ── Media streaming ───────────────────────────────────────────────────────────

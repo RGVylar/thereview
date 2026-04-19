@@ -43,14 +43,26 @@
 	// Media download status keyed by meme_id: "pending" | "ready" | "failed"
 	let mediaStatus = $state({});
 	let mediaPoller = null;
+	let dlLiveProgress = $state(null); // real-time {downloaded_bytes, total_bytes, speed_bps, active_count}
 
-	// Download progress derived from mediaStatus
-	let dlTotal   = $derived(Object.keys(mediaStatus).length);
+	// Download progress derived from mediaStatus (excludes _progress key)
+	let dlTotal   = $derived(Object.keys(mediaStatus).filter(k => k !== '_progress').length);
 	let dlReady   = $derived(Object.values(mediaStatus).filter(s => s === 'ready').length);
 	let dlFailed  = $derived(Object.values(mediaStatus).filter(s => s === 'failed').length);
 	let dlPending = $derived(Object.values(mediaStatus).filter(s => s === 'pending').length);
 	let dlSettled = $derived(dlTotal > 0 && dlPending === 0);
 	let dlPct     = $derived(dlTotal > 0 ? Math.round(((dlReady + dlFailed) / dlTotal) * 100) : 0);
+
+	function formatBytes(bytes) {
+		if (!bytes || bytes <= 0) return '0 MB';
+		if (bytes >= 1_073_741_824) return (bytes / 1_073_741_824).toFixed(1) + ' GB';
+		return (bytes / 1_048_576).toFixed(1) + ' MB';
+	}
+	function formatSpeed(bps) {
+		if (!bps || bps <= 0) return '';
+		if (bps >= 1_048_576) return (bps / 1_048_576).toFixed(1) + ' MB/s';
+		return (bps / 1024).toFixed(0) + ' KB/s';
+	}
 
 	// Reference to the currently mounted local <video> element (if any).
 	// Managed by the localVideoSync Svelte action.
@@ -331,13 +343,17 @@
 
 		async function fetchMediaStatus() {
 			try {
-				const statuses = await api(`/api/sessions/${session.id}/media`, { token: authVal.token });
+				const raw = await api(`/api/sessions/${session.id}/media`, { token: authVal.token });
+				dlLiveProgress = raw._progress ?? null;
+				// eslint-disable-next-line no-unused-vars
+				const { _progress, ...statuses } = raw;
 				mediaStatus = statuses;
 				// Stop polling once everything is resolved
 				const pending = Object.values(statuses).some((s) => s === 'pending');
 				if (!pending && mediaPoller) {
 					clearInterval(mediaPoller);
 					mediaPoller = null;
+					dlLiveProgress = null;
 				}
 			} catch { /* ignore */ }
 		}
@@ -623,8 +639,22 @@
 						<div class="dl-progress-bar">
 							<div class="dl-progress-fill" style="width: {dlPct}%"></div>
 						</div>
+						<div class="dl-progress-stats">
+							<span class="dl-stat">{dlPct}%</span>
+							{#if dlLiveProgress?.total_bytes > 0}
+								<span class="dl-stat">{formatBytes(dlLiveProgress.downloaded_bytes)} / {formatBytes(dlLiveProgress.total_bytes)}</span>
+							{:else if dlLiveProgress?.downloaded_bytes > 0}
+								<span class="dl-stat">{formatBytes(dlLiveProgress.downloaded_bytes)}</span>
+							{/if}
+							{#if dlLiveProgress?.speed_bps > 0}
+								<span class="dl-stat dl-speed">↓ {formatSpeed(dlLiveProgress.speed_bps)}</span>
+							{/if}
+							{#if dlLiveProgress?.active_count > 0}
+								<span class="dl-stat">{dlLiveProgress.active_count} activos</span>
+							{/if}
+						</div>
 						<p class="dl-progress-sub">
-							{dlPct}% · La sesión arrancará sola al terminar
+							La sesión arrancará sola al terminar
 							{#if dlFailed > 0}&nbsp;·&nbsp;<span class="dl-failed">{dlFailed} no disponibles</span>{/if}
 						</p>
 					</div>
@@ -1157,11 +1187,28 @@
 		transition: width 0.5s ease;
 		box-shadow: 0 0 8px rgba(229,62,62,0.5);
 	}
+	.dl-progress-stats {
+		display: flex;
+		flex-wrap: wrap;
+		justify-content: center;
+		gap: 0.4rem 0.75rem;
+		width: 100%;
+	}
+	.dl-stat {
+		font-size: 0.82rem;
+		color: var(--text-muted);
+		font-variant-numeric: tabular-nums;
+	}
+	.dl-speed {
+		color: #68d391; /* green */
+		font-weight: 600;
+	}
 	.dl-progress-sub {
-		font-size: 0.78rem;
+		font-size: 0.75rem;
 		color: var(--text-muted);
 		margin: 0;
 		text-align: center;
+		opacity: 0.65;
 	}
 
 	/* Shared wrapper for sync-capable embeds */
