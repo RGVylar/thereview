@@ -155,6 +155,7 @@ _META_FIELDS = (
 
 def _run_ytdlp(out: Path, url: str, session_id: int, meme_id: int) -> dict:
     """Run yt-dlp via its Python API.  Returns extracted metadata dict (may be empty)."""
+    print(f"[DL] _run_ytdlp starting: {url}")
     try:
         import yt_dlp
     except ImportError:
@@ -162,6 +163,7 @@ def _run_ytdlp(out: Path, url: str, session_id: int, meme_id: int) -> dict:
 
     meta: dict = {}
     with _DL_SEMAPHORE:
+        print(f"[DL] Entered semaphore for {meme_id}, starting YoutubeDL...")
         ydl_opts = {
             "outtmpl": str(out),
             "quiet": True,
@@ -176,10 +178,17 @@ def _run_ytdlp(out: Path, url: str, session_id: int, meme_id: int) -> dict:
             "nopart": True,
             "progress_hooks": [_make_progress_hook(session_id, meme_id)],
         }
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            ie = ydl.extract_info(url, download=True)
-            if ie:
-                meta = {k: ie[k] for k in _META_FIELDS if ie.get(k) is not None}
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                print(f"[DL] Calling extract_info for {url}")
+                ie = ydl.extract_info(url, download=True)
+                print(f"[DL] extract_info done, got result: {ie is not None}")
+                if ie:
+                    meta = {k: ie[k] for k in _META_FIELDS if ie.get(k) is not None}
+        except Exception as e:
+            print(f"[DL] ERROR in YoutubeDL: {e}")
+            raise
+        print(f"[DL] _run_ytdlp completed for {meme_id}, meta keys: {list(meta.keys())}")
     return meta
 
 
