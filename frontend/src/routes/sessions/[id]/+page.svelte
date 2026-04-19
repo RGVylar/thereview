@@ -476,7 +476,7 @@
 	}
 
 	// Fun tap buttons — shown while waiting during download
-	const FUN_BUTTONS = ['🔔','🎉','💩','👋','🍿','💀'];
+	const FUN_BUTTONS = ['🔔','🎉','💩','👋','🍿','💀','🐒'];
 	let floatingEmojis = $state([]); // [{id, emoji, x, user}]
 	let _emojiId = 0;
 
