@@ -956,7 +956,10 @@
 							← Anterior
 						</button>
 						{#if currentIndex === session.session_memes.length - 1}
-							<button class="btn-primary" onclick={() => (view = 'ranking')}>
+							<button class="btn-primary" onclick={async () => {
+								ranking = await api(`/api/sessions/${session.id}/votes/ranking`, { token: authVal.token });
+								view = 'ranking';
+							}}>
 								📊 Ver ranking
 							</button>
 						{:else}
