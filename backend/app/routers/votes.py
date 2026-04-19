@@ -93,8 +93,8 @@ def list_votes(
 @router.get("/ranking", response_model=list[RankingEntry])
 def get_ranking(
     session_id: int,
-    top: int = Query(default=0, ge=0, le=50),
-    bottom: int = Query(default=0, ge=0, le=50),
+    top: int = Query(default=5, ge=0, le=50),
+    bottom: int = Query(default=5, ge=0, le=50),
     db: DBSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -113,6 +113,7 @@ def get_ranking(
         )
         .filter(SessionMeme.session_id == session_id)
         .group_by(Meme.id, Meme.url, User.display_name)
+        .having(func.count(Vote.id) > 0)  # exclude memes nobody voted on
         .order_by(func.coalesce(func.sum(Vote.value), 0).desc())
         .all()
     )

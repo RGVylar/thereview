@@ -94,6 +94,20 @@ def create_session(
     if not memes:
         raise HTTPException(status_code=400, detail="No pending memes for selected users")
 
+    # Deduplicate by URL: keep one representative per URL, track extra submitters
+    from collections import defaultdict
+    url_count: dict[str, int] = defaultdict(int)
+    for m in memes:
+        url_count[str(m.url)] += 1
+    seen_urls: set[str] = set()
+    deduped: list = []
+    for m in memes:
+        url = str(m.url)
+        if url not in seen_urls:
+            seen_urls.add(url)
+            deduped.append(m)
+    memes = deduped
+
     session = Session(
         name=body.name,
         created_by=current_user.id,
@@ -108,7 +122,8 @@ def create_session(
         db.add(SessionUser(session_id=session.id, user_id=uid))
 
     for idx, meme in enumerate(memes):
-        db.add(SessionMeme(session_id=session.id, meme_id=meme.id, position=idx))
+        extra = url_count[str(meme.url)] - 1  # submitters beyond the first
+        db.add(SessionMeme(session_id=session.id, meme_id=meme.id, position=idx, extra_count=extra))
 
     # Schedule downloads for TikTok/Twitter memes in the background so they
     # are ready (or close to it) by the time the session actually starts.

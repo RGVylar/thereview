@@ -84,6 +84,7 @@ class SessionMemeOut(BaseModel):
     id: int
     meme_id: int
     position: int
+    extra_count: int = 0  # number of extra submitters beyond the first
     meme: MemeOut
 
     model_config = {"from_attributes": True}

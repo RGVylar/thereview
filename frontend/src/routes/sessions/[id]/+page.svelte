@@ -265,8 +265,10 @@
 					loadSession();
 				} else if (msg.type === 'navigate') {
 					currentIndex = msg.index;
+					nextVoters = [];
 					playbackStates = {};
 					autoplayReady = null;
+					if (session) savePosition(session.id, msg.index);
 				} else if (msg.type === 'vote') {
 					// Update local votes from remote
 					votes = votes.filter(
@@ -290,8 +292,21 @@
 					if (msg.emoji === '🐒') playMonkeySound();
 					spawnEmoji(msg.emoji, msg.user);
 				} else if (msg.type === 'show_ranking') {
-					ranking = await api(`/api/sessions/${session.id}/votes/ranking?top=3&bottom=3`, { token: authVal.token });
+					ranking = await api(`/api/sessions/${session.id}/votes/ranking?top=5&bottom=5`, { token: authVal.token });
 					view = 'ranking';
+				} else if (msg.type === 'note_update') {
+					noteText = msg.text;
+				} else if (msg.type === 'next_vote') {
+					if (!nextVoters.includes(msg.user_id)) {
+						nextVoters = [...nextVoters, msg.user_id];
+					}
+					const sm = session?.session_memes?.[currentIndex];
+					const isOwner = sm?.meme.user_id === msg.user_id;
+					const allAgreed = isOwner || session.participants.every(p => nextVoters.includes(p.id));
+					if (allAgreed) {
+						nextVoters = [];
+						next();
+					}
 				} else if (msg.type === 'play_sync') {
 					// legacy — absorbed by playback system
 				} else if (msg.type === 'playback') {
@@ -410,7 +425,7 @@
 			session = await api(`/api/sessions/${id}`, { token: authVal.token });
 			votes = await api(`/api/sessions/${id}/votes`, { token: authVal.token });
 			if (session.status === 'finished') {
-				ranking = await api(`/api/sessions/${id}/votes/ranking?top=3&bottom=3`, { token: authVal.token });
+				ranking = await api(`/api/sessions/${id}/votes/ranking?top=5&bottom=5`, { token: authVal.token });
 				view = 'ranking';
 			}
 			if (session.status === 'pending' || session.status === 'active') {
@@ -420,6 +435,8 @@
 			}
 			if (session.status === 'active') {
 				startTimer(session.started_at);
+				// Restore last known position after F5
+				restorePosition(session.id, session.session_memes.length - 1);
 			}
 		} catch (e) {
 			error = e.message;
@@ -553,7 +570,7 @@
 				method: 'POST',
 				token: authVal.token
 			});
-			ranking = await api(`/api/sessions/${session.id}/votes/ranking?top=3&bottom=3`, { token: authVal.token });
+			ranking = await api(`/api/sessions/${session.id}/votes/ranking?top=5&bottom=5`, { token: authVal.token });
 			view = 'ranking';
 			if (timerInterval) clearInterval(timerInterval);
 		} catch (e) {
@@ -587,6 +604,17 @@
 			if (ws && ws.readyState === WebSocket.OPEN) {
 				ws.send(JSON.stringify({ type: 'vote', meme_id: memeId, value }));
 			}
+			// Auto-skip if all participants voted and everyone is below 25%
+			const sm = session.session_memes[currentIndex];
+			if (sm?.meme.id === memeId) {
+				const total = session.session_memes.length;
+				const threshold = total * 0.25;
+				const memeVotes = votes.filter(v => v.meme_id === memeId);
+				const allVoted = session.participants.every(p => memeVotes.some(v => v.user_id === p.id));
+				if (allVoted && memeVotes.every(v => v.value < threshold)) {
+					setTimeout(() => next(), 600);
+				}
+			}
 		} catch (e) {
 			error = e.message;
 		}
@@ -615,8 +643,10 @@
 	function prev() {
 		if (currentIndex > 0) {
 			currentIndex--;
+			nextVoters = [];
 			playbackStates = {};
 			autoplayReady = null;
+			savePosition(session.id, currentIndex);
 			if (ws && ws.readyState === WebSocket.OPEN) {
 				ws.send(JSON.stringify({ type: 'navigate', index: currentIndex }));
 			}
@@ -626,8 +656,10 @@
 	function next() {
 		if (currentIndex < session.session_memes.length - 1) {
 			currentIndex++;
+			nextVoters = [];
 			playbackStates = {};
 			autoplayReady = null;
+			savePosition(session.id, currentIndex);
 			if (ws && ws.readyState === WebSocket.OPEN) {
 				ws.send(JSON.stringify({ type: 'navigate', index: currentIndex }));
 			}
@@ -669,6 +701,78 @@
 		return embedType === 'tiktok' || embedType === 'twitter';
 	}
 
+	// ── Shared notepad ────────────────────────────────────────────────────────
+	let noteText = $state('');
+	let noteVisible = $state(false);
+	let _noteSendTimer = null;
+	function sendNote(text) {
+		if (_noteSendTimer) clearTimeout(_noteSendTimer);
+		_noteSendTimer = setTimeout(() => {
+			if (ws?.readyState === WebSocket.OPEN) {
+				ws.send(JSON.stringify({ type: 'note_update', text }));
+			}
+		}, 250);
+	}
+
+	// ── Both-must-click-next ──────────────────────────────────────────────────
+	let nextVoters = $state([]); // user_ids who clicked "siguiente"
+
+	function voteNext() {
+		const uid = authVal.user?.id;
+		const sm = currentMeme();
+		if (!sm) return;
+		// Meme submitter can skip alone
+		const isOwner = sm.meme.user_id === uid;
+		if (!nextVoters.includes(uid)) {
+			nextVoters = [...nextVoters, uid];
+			if (ws?.readyState === WebSocket.OPEN) {
+				ws.send(JSON.stringify({ type: 'next_vote' }));
+			}
+		}
+		const allAgreed = isOwner || session.participants.every(p => nextVoters.includes(p.id));
+		if (allAgreed) {
+			nextVoters = [];
+			next();
+		}
+	}
+
+	// ── Unique vote scores per user per session ───────────────────────────────
+	// Returns the set of values this user has used for OTHER memes (not memeId)
+	function getUsedOtherScores(memeId) {
+		return new Set(
+			votes.filter(v => v.user_id === authVal.user?.id && v.meme_id !== memeId).map(v => v.value)
+		);
+	}
+
+	// Snap to nearest available score if value is already taken by another vote
+	function resolveScore(value, memeId, total) {
+		const taken = getUsedOtherScores(memeId);
+		if (!taken.has(value)) return value;
+		for (let d = 1; d <= total; d++) {
+			if (!taken.has(value + d) && value + d <= total) return value + d;
+			if (!taken.has(value - d) && value - d >= 0) return value - d;
+		}
+		return value; // fallback (all taken — shouldn't happen)
+	}
+
+	// ── F5 recovery ───────────────────────────────────────────────────────────
+	function savePosition(sessionId, index) {
+		try { localStorage.setItem(`tr_pos_${sessionId}`, String(index)); } catch {}
+	}
+	function restorePosition(sessionId, maxIndex) {
+		try {
+			const saved = localStorage.getItem(`tr_pos_${sessionId}`);
+			if (saved !== null) currentIndex = Math.min(parseInt(saved, 10) || 0, maxIndex);
+		} catch {}
+	}
+
+	// ── Show ranking (shared with WS) ─────────────────────────────────────────
+	async function showRanking() {
+		ranking = await api(`/api/sessions/${session.id}/votes/ranking?top=5&bottom=5`, { token: authVal.token });
+		view = 'ranking';
+		if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'show_ranking' }));
+	}
+
 	$effect(() => {
 		const sm = session?.session_memes?.[currentIndex];
 		if (!sm) return;
@@ -702,7 +806,17 @@
 
 	{#if session}
 		<div class="session-header">
-			<h2 class="page-title">{session.name}</h2>
+			<div class="session-header-top">
+				<h2 class="page-title">{session.name}</h2>
+				{#if session.status === 'active'}
+					<button
+						class="btn-notepad"
+						class:active={noteVisible}
+						onclick={() => (noteVisible = !noteVisible)}
+						title="Notas compartidas"
+					>📝</button>
+				{/if}
+			</div>
 			<div class="header-meta">
 				<div class="participants">
 					{#each session.participants as p}
@@ -831,6 +945,7 @@
 			{#if sm}
 				{@const embed = detectEmbed(sm.meme.url)}
 				{@const myVote = getMyVote(sm.meme.id)}
+				<div class="presentation-wrap" class:notepad-open={noteVisible}>
 				<div class="presentation">
 					<div class="progress-bar">
 						<span>{currentIndex + 1} / {session.session_memes.length}</span>
@@ -842,9 +957,19 @@
 						</div>
 					</div>
 
+				<div class="meme-and-nav">
+					<button
+						class="nav-side nav-side-prev"
+						onclick={prev}
+						disabled={currentIndex === 0}
+						title="Anterior"
+					>‹</button>
+
 					<div class="card meme-display">
 						<div class="meme-source">
-							<span class="meme-type">{embed.type}</span>
+							<span class="meme-type">{embed.type}
+								{#if sm.extra_count > 0}<span class="dup-badge">×{sm.extra_count + 1}</span>{/if}
+							</span>
 							<span class="meme-author">by {session.participants.find(p => p.id === sm.meme.user_id)?.display_name || '?'}</span>
 						</div>
 
@@ -940,9 +1065,13 @@
 						{@const totalMemes = session.session_memes.length}
 						{@const sliderVal = myVote?.value ?? null}
 						{@const rankPct = sliderVal !== null ? sliderVal / totalMemes : null}
+						{@const usedOther = getUsedOtherScores(sm.meme.id)}
 						<div class="voting">
-							<div class="rank-slider-wrap">
-								<span class="rank-edge rank-bad">💀<br><small>Peor</small></span>
+							<div class="rank-slider-full">
+								<div class="rank-labels">
+									<span>💀 Peor</span>
+									<span>🏆 Mejor</span>
+								</div>
 								<div class="rank-slider-track">
 									{#if sliderVal !== null}
 										<div class="rank-badge" style="left: {rankPct * 100}%">{sliderVal}</div>
@@ -953,9 +1082,13 @@
 										max={totalMemes}
 										value={sliderVal ?? Math.round(totalMemes / 2)}
 										class="rank-slider"
-										onchange={(e) => castVote(sm.meme.id, +e.target.value)}
+										onchange={(e) => {
+											const resolved = resolveScore(+e.target.value, sm.meme.id, totalMemes);
+											e.target.value = resolved;
+											castVote(sm.meme.id, resolved);
+										}}
 									/>
-									<!-- Other users' votes as dots below the track -->
+									<!-- Other users' votes as dots -->
 									{#each votes.filter(v => v.meme_id === sm.meme.id && v.user_id !== authVal.user?.id) as ov}
 										{@const participant = session.participants.find(p => p.id === ov.user_id)}
 										<span
@@ -964,14 +1097,17 @@
 											style="left: {(ov.value / totalMemes) * 100}%"
 										></span>
 									{/each}
+									<!-- Taken score ticks (used in other memes by this user) -->
+									{#each [...usedOther] as taken}
+										<span class="taken-tick" style="left: {(taken / totalMemes) * 100}%"></span>
+									{/each}
 								</div>
-								<span class="rank-edge rank-good">🏆<br><small>Mejor</small></span>
 							</div>
 							{#if sliderVal === null}
-								<p class="rank-hint">Desliza para colocar este meme en el ranking</p>
+								<p class="rank-hint">Desliza para posicionar este meme</p>
 							{:else}
 								<p class="rank-hint">
-									Puesto <strong>{sliderVal}</strong> de {totalMemes}
+									Posición <strong>{sliderVal}</strong> de {totalMemes}
 									· {#if rankPct < 0.25}💀 fondo
 									{:else if rankPct < 0.5}😐 medio-bajo
 									{:else if rankPct < 0.75}😄 medio-alto
@@ -990,28 +1126,53 @@
 							</div>
 						</div>
 					{/if}
-					</div>
+					</div><!-- /card meme-display -->
 
-					<!-- Navigation -->
-					<div class="nav-buttons">
-						<button class="btn-secondary" onclick={prev} disabled={currentIndex === 0}>
-							← Anterior
-						</button>
+					<!-- Right nav: next or ver ranking -->
+					<div class="nav-side-wrap">
 						{#if currentIndex === session.session_memes.length - 1}
-							<button class="btn-primary" onclick={async () => {
-								ranking = await api(`/api/sessions/${session.id}/votes/ranking?top=3&bottom=3`, { token: authVal.token });
-								view = 'ranking';
-								if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'show_ranking' }));
-							}}>
-								📊 Ver ranking
-							</button>
+							<button class="nav-side nav-side-rank" onclick={showRanking} title="Ver ranking">📊</button>
 						{:else}
-							<button class="btn-primary" onclick={next}>
-								Siguiente →
-							</button>
+							<button
+								class="nav-side"
+								class:nav-ready={nextVoters.includes(authVal.user?.id)}
+								onclick={voteNext}
+								title="Siguiente"
+							>›</button>
+							{#if nextVoters.length > 0 || session.participants.length > 1}
+								<div class="next-vote-dots">
+									{#each session.participants as p}
+										<span
+											class="next-vote-dot"
+											class:voted={nextVoters.includes(p.id)}
+											title={p.display_name}
+										></span>
+									{/each}
+								</div>
+							{/if}
 						{/if}
 					</div>
-				</div>
+				</div><!-- /meme-and-nav -->
+
+				</div><!-- /presentation -->
+
+				<!-- Notepad sidebar -->
+				{#if noteVisible}
+					<div class="notepad-sidebar">
+						<div class="notepad-header">
+							<span>📝 Notas</span>
+							<button class="notepad-close" onclick={() => (noteVisible = false)}>✕</button>
+						</div>
+						<textarea
+							class="notepad-textarea"
+							bind:value={noteText}
+							oninput={(e) => sendNote(e.target.value)}
+							placeholder="Notas compartidas — todo el mundo ve los cambios en tiempo real…"
+						></textarea>
+					</div>
+				{/if}
+
+				</div><!-- /presentation-wrap -->
 			{/if}
 		{/if}
 
@@ -1083,57 +1244,62 @@
 						</div>
 					{/if}
 
-					<!-- Top 3 + Bottom 3 list -->
-					{@const top3 = ranking.slice(0, 3)}
-					{@const bottom3 = ranking.length > 3 ? ranking.slice(-3) : []}
-					{@const showDivider = ranking.length > 6}
-					<div class="ranking-list">
-						{#each top3 as entry, i (entry.meme_id)}
-							{@const embed = detectEmbed(entry.url)}
-							{@const avg = entry.vote_count ? entry.total_score / entry.vote_count : 0}
-							{@const pct = Math.round(avg / totalMemes * 100)}
-							{@const barPct = Math.round(entry.total_score / maxScore * 100)}
-							{@const previewSrc = rankingPreviewSrc(entry)}
-							<div class="ranking-row top3">
-								<div class="ranking-pos">
-									{i === 0 ? '🥇' : i === 1 ? '🥈' : '🥉'}
-								</div>
-								<a href={entry.url} target="_blank" rel="noopener noreferrer" class="ranking-type-icon" title={entry.url}>
-									{#if previewSrc}
-										<img src={previewSrc} alt="" class="ranking-thumb" loading="lazy" referrerpolicy="no-referrer" />
-									{:else}
-										{typeIcon(embed.type)}
-									{/if}
-								</a>
-								<div class="ranking-bar-wrap">
-									<div class="ranking-bar-meta">
-										<span class="ranking-submitter">por {entry.submitted_by}</span>
-										<span class="ranking-pct">{pct}%</span>
-									</div>
-									<div class="ranking-bar-track">
-										<div class="ranking-bar-fill" style="width:{barPct}%"></div>
-									</div>
-									<div class="ranking-user-votes">
-										{#each session.participants as p}
-											{@const uv = votes.find(v => v.meme_id === entry.meme_id && v.user_id === p.id)}
-											<span class="uv-chip" class:uv-mine={p.id === authVal.user?.id} title="{p.display_name}: {uv ? uv.value + '/' + totalMemes : 'sin votar'}">
-												{p.display_name.slice(0,1).toUpperCase()}
-												{#if uv}<strong>{uv.value}</strong>{:else}—{/if}
-											</span>
-										{/each}
-									</div>
-								</div>
-							</div>
-						{/each}
+					<!-- TOP BASED + CRINGE -->
+					{@const topEntries = ranking.slice(0, 5)}
+					{@const cringe = ranking.length > 5 ? ranking.slice(-5).filter(b => !topEntries.find(t => t.meme_id === b.meme_id)) : []}
+					{@const midCount = Math.max(0, ranking.length - topEntries.length - cringe.length)}
 
-						{#if bottom3.length > 0}
-							{#if showDivider}
-								<div class="ranking-divider">
-									<span>· · · {ranking.length - 6} más · · ·</span>
+					{#if topEntries.length > 0}
+						<div class="ranking-section-label ranking-label-top">🏆 TOP BASED</div>
+						<div class="ranking-list">
+							{#each topEntries as entry, i (entry.meme_id)}
+								{@const embed = detectEmbed(entry.url)}
+								{@const avg = entry.vote_count ? entry.total_score / entry.vote_count : 0}
+								{@const pct = Math.round(avg / totalMemes * 100)}
+								{@const barPct = Math.round(entry.total_score / maxScore * 100)}
+								{@const previewSrc = rankingPreviewSrc(entry)}
+								<div class="ranking-row top3">
+									<div class="ranking-pos">
+										{i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i+1}`}
+									</div>
+									<a href={entry.url} target="_blank" rel="noopener noreferrer" class="ranking-type-icon" title={entry.url}>
+										{#if previewSrc}
+											<img src={previewSrc} alt="" class="ranking-thumb" loading="lazy" referrerpolicy="no-referrer" />
+										{:else}
+											{typeIcon(embed.type)}
+										{/if}
+									</a>
+									<div class="ranking-bar-wrap">
+										<div class="ranking-bar-meta">
+											<span class="ranking-submitter">por {entry.submitted_by}</span>
+											<span class="ranking-pct">{pct}%</span>
+										</div>
+										<div class="ranking-bar-track">
+											<div class="ranking-bar-fill" style="width:{barPct}%"></div>
+										</div>
+										<div class="ranking-user-votes">
+											{#each session.participants as p}
+												{@const uv = votes.find(v => v.meme_id === entry.meme_id && v.user_id === p.id)}
+												<span class="uv-chip" class:uv-mine={p.id === authVal.user?.id} title="{p.display_name}: {uv ? uv.value + '/' + totalMemes : 'sin votar'}">
+													{p.display_name.slice(0,1).toUpperCase()}
+													{#if uv}<strong>{uv.value}</strong>{:else}—{/if}
+												</span>
+											{/each}
+										</div>
+									</div>
 								</div>
-							{/if}
-							{#each bottom3 as entry, i (entry.meme_id)}
-								{@const realIndex = ranking.length - 3 + i}
+							{/each}
+						</div>
+					{/if}
+
+					{#if cringe.length > 0}
+						{#if midCount > 0}
+							<div class="ranking-divider"><span>· · · {midCount} sin mostrar · · ·</span></div>
+						{/if}
+						<div class="ranking-section-label ranking-label-cringe">💩 CRINGE</div>
+						<div class="ranking-list">
+							{#each cringe as entry (entry.meme_id)}
+								{@const realIndex = ranking.findIndex(r => r.meme_id === entry.meme_id)}
 								{@const embed = detectEmbed(entry.url)}
 								{@const avg = entry.vote_count ? entry.total_score / entry.vote_count : 0}
 								{@const pct = Math.round(avg / totalMemes * 100)}
@@ -1170,8 +1336,8 @@
 									</div>
 								</div>
 							{/each}
-						{/if}
-					</div>
+						</div>
+					{/if}
 				{/if}
 			</div>
 		{/if}
@@ -1860,6 +2026,202 @@
 	}
 	.unmute-overlay:hover {
 		background: rgba(229, 62, 62, 0.85);
+	}
+
+	/* ── Side nav layout ── */
+	.meme-and-nav {
+		display: flex;
+		gap: 0.5rem;
+		align-items: stretch;
+	}
+	.meme-and-nav > .card { flex: 1; min-width: 0; }
+	.nav-side {
+		width: 44px;
+		flex-shrink: 0;
+		background: rgba(255,255,255,0.05);
+		border: 1px solid rgba(255,255,255,0.1);
+		border-radius: 12px;
+		font-size: 2rem;
+		color: var(--text);
+		cursor: pointer;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		transition: background 0.15s;
+		padding: 0;
+		line-height: 1;
+	}
+	.nav-side:hover:not(:disabled) { background: rgba(255,255,255,0.1); }
+	.nav-side:disabled { opacity: 0.2; cursor: not-allowed; }
+	.nav-side.nav-ready {
+		background: rgba(104,211,145,0.15);
+		border-color: rgba(104,211,145,0.35);
+	}
+	.nav-side-wrap {
+		width: 44px;
+		flex-shrink: 0;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 6px;
+	}
+	.nav-side-wrap > .nav-side { flex: 1; width: 100%; }
+	.next-vote-dots {
+		display: flex;
+		flex-direction: column;
+		gap: 4px;
+		align-items: center;
+		padding: 2px 0;
+	}
+	.next-vote-dot {
+		width: 8px;
+		height: 8px;
+		border-radius: 50%;
+		background: rgba(255,255,255,0.15);
+		border: 2px solid rgba(255,255,255,0.1);
+		transition: all 0.2s;
+		flex-shrink: 0;
+	}
+	.next-vote-dot.voted { background: #68d391; border-color: #38a169; }
+
+	/* ── Presentation + notepad wrapper ── */
+	.presentation-wrap {
+		display: flex;
+		gap: 0.75rem;
+		align-items: flex-start;
+	}
+	.presentation-wrap > .presentation { flex: 1; min-width: 0; }
+
+	/* ── Notepad sidebar ── */
+	.notepad-sidebar {
+		width: 260px;
+		flex-shrink: 0;
+		background: rgba(255,255,255,0.04);
+		border: 1px solid rgba(255,255,255,0.1);
+		border-radius: 12px;
+		display: flex;
+		flex-direction: column;
+		overflow: hidden;
+		position: sticky;
+		top: 1rem;
+		max-height: calc(100vh - 120px);
+	}
+	.notepad-header {
+		padding: 0.5rem 0.75rem;
+		border-bottom: 1px solid rgba(255,255,255,0.08);
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		font-size: 0.78rem;
+		font-weight: 600;
+		color: var(--text-muted);
+	}
+	.notepad-close {
+		background: none;
+		border: none;
+		color: var(--text-muted);
+		cursor: pointer;
+		font-size: 0.9rem;
+		padding: 0;
+		line-height: 1;
+	}
+	.notepad-textarea {
+		flex: 1;
+		background: none;
+		border: none;
+		color: var(--text);
+		font-size: 0.84rem;
+		padding: 0.75rem;
+		resize: none;
+		font-family: inherit;
+		line-height: 1.6;
+		min-height: 300px;
+	}
+	.notepad-textarea:focus { outline: none; }
+	.notepad-textarea::placeholder { color: var(--text-muted); opacity: 0.4; }
+
+	/* ── Notepad toggle button ── */
+	.session-header-top {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+	}
+	.session-header-top > .page-title { flex: 1; margin: 0; }
+	.btn-notepad {
+		background: rgba(255,255,255,0.06);
+		border: 1px solid rgba(255,255,255,0.1);
+		border-radius: 10px;
+		padding: 0.35rem 0.6rem;
+		font-size: 1.1rem;
+		cursor: pointer;
+		transition: background 0.15s;
+		line-height: 1;
+		flex-shrink: 0;
+	}
+	.btn-notepad:hover { background: rgba(255,255,255,0.12); }
+	.btn-notepad.active {
+		background: rgba(229,62,62,0.15);
+		border-color: rgba(229,62,62,0.3);
+	}
+
+	/* ── Full-width rank slider ── */
+	.rank-slider-full {
+		width: 100%;
+		display: flex;
+		flex-direction: column;
+		gap: 0.25rem;
+	}
+	.rank-labels {
+		display: flex;
+		justify-content: space-between;
+		font-size: 0.75rem;
+		color: var(--text-muted);
+	}
+
+	/* ── Used-score ticks ── */
+	.taken-tick {
+		position: absolute;
+		top: -3px;
+		width: 3px;
+		height: 20px;
+		background: rgba(229,62,62,0.55);
+		border-radius: 2px;
+		transform: translateX(-50%);
+		pointer-events: none;
+		z-index: 1;
+	}
+
+	/* ── Duplicate badge ── */
+	.dup-badge {
+		display: inline-block;
+		background: rgba(229,62,62,0.2);
+		color: var(--accent);
+		border: 1px solid rgba(229,62,62,0.3);
+		border-radius: 6px;
+		font-size: 0.65rem;
+		font-weight: 700;
+		padding: 0 4px;
+		margin-left: 4px;
+		vertical-align: middle;
+	}
+
+	/* ── Ranking section labels ── */
+	.ranking-section-label {
+		font-size: 0.75rem;
+		font-weight: 800;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+		padding: 0.3rem 0.5rem;
+		border-radius: 6px;
+		margin-top: 0.5rem;
+	}
+	.ranking-label-top {
+		background: rgba(246,224,94,0.1);
+		color: #f6e05e;
+	}
+	.ranking-label-cringe {
+		background: rgba(229,62,62,0.1);
+		color: var(--accent);
 	}
 
 	.media-loading {

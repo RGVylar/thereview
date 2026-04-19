@@ -117,6 +117,8 @@ class SessionMeme(Base):
     session_id: Mapped[int] = mapped_column(ForeignKey("sessions.id"), nullable=False)
     meme_id: Mapped[int] = mapped_column(ForeignKey("memes.id"), nullable=False)
     position: Mapped[int] = mapped_column(Integer, nullable=False)
+    # How many OTHER users also submitted the same URL (0 = unique)
+    extra_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
     session: Mapped["Session"] = relationship(back_populates="session_memes")
     meme: Mapped["Meme"] = relationship(back_populates="session_memes")

@@ -207,6 +207,19 @@ async def session_ws(websocket: WebSocket, session_id: int, token: str = Query(.
                     {"type": "fun_tap", "emoji": msg.get("emoji", "👋"), "user": display_name},
                 )
 
+            elif msg_type == "note_update":
+                await _broadcast(
+                    session_id,
+                    {"type": "note_update", "text": msg.get("text", ""), "user": display_name},
+                    exclude_uid=user_id,  # don't echo back to sender
+                )
+
+            elif msg_type == "next_vote":
+                await _broadcast(
+                    session_id,
+                    {"type": "next_vote", "user_id": user_id, "user": display_name},
+                )
+
             elif msg_type == "show_ranking":
                 await _broadcast(
                     session_id,
