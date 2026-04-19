@@ -122,7 +122,7 @@ def download_and_update(session_id: int, meme_id: int, url: str) -> None:
             cache.status = "ready"
             if meta:
                 import json
-                cache.dl_metadata = json.dumps(meta, ensure_ascii=False)
+                cache.dl_metadata = json.dumps(meta, ensure_ascii=True)
         else:
             cache.status = "failed"
             cache.error = "yt-dlp produced no output file"
