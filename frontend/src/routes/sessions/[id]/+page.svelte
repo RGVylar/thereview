@@ -955,8 +955,8 @@
 								{/each}
 							</div>
 						</div>
-					</div>
 					{/if}
+					</div>
 
 					<!-- Navigation -->
 					<div class="nav-buttons">
