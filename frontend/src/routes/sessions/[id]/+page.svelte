@@ -250,6 +250,7 @@
 
 		socket.onopen = () => {
 			_wsConnecting = false;
+			socket._opened = true;
 			syncMessage = '';
 			// Tell the extension which session we joined so it can route video events
 			window.postMessage({ type: 'THEREVIEW_JOIN_SYNC', sessionId }, '*');
@@ -380,7 +381,7 @@
 			} catch {}
 		};
 
-		socket.onclose = () => {
+		socket.onclose = (event) => {
 			_wsConnecting = false;
 			ws = null;
 			window.postMessage({ type: 'THEREVIEW_LEAVE_SYNC' }, '*');
@@ -388,10 +389,12 @@
 				window.removeEventListener('message', extPlaybackHandler);
 				extPlaybackHandler = null;
 			}
-			// Auto-reconnect if session is still active/pending
-			if (session && session.status !== 'finished') {
+			// Don't reconnect if server rejected us (auth/permission error)
+			// or if the session changed / ended
+			const rejected = !socket._opened; // never got onopen → server rejected
+			if (!rejected && session && session.status !== 'finished' && session.id === sessionId) {
 				_wsReconnectTimer = setTimeout(() => {
-					if (!ws && session && session.status !== 'finished') {
+					if (!ws && session && session.status !== 'finished' && session.id === sessionId) {
 						connectWs(sessionId, token);
 					}
 				}, 2000);
