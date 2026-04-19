@@ -214,18 +214,21 @@
 
   // ── Init ──────────────────────────────────────────────────────────────────
 
-  // TikTok is a SPA — watch for videos appearing after navigation
-  const initObs = new MutationObserver(() => {
-    passiveHarvest();
-    if (document.querySelector('a[href*="/video/"]') && !panel) {
-      createPanel();
-    }
-  });
+  // Only run on profile/liked/favorites pages that contain an @username in the URL.
+  // Skip the main feed, for-you page, etc. — the MutationObserver + querySelectorAll
+  // combination is too heavy for TikTok's SPA on pages with constant DOM churn.
+  if (!window.location.href.includes('/@')) return;
 
   function init() {
-    initObs.observe(document.documentElement, { childList: true, subtree: true });
     passiveHarvest();
     if (document.querySelector('a[href*="/video/"]')) createPanel();
+
+    // Light polling — avoids attaching a MutationObserver to the entire document,
+    // which caused TikTok to lag/break on high-mutation pages.
+    setInterval(() => {
+      passiveHarvest();
+      if (document.querySelector('a[href*="/video/"]') && !panel) createPanel();
+    }, 2000);
   }
 
   if (document.readyState === 'loading') {
