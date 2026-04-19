@@ -48,11 +48,11 @@
 	let dlElapsed = $state(0);        // seconds elapsed
 	let dlElapsedTimer = null;
 
-	// Download progress derived from mediaStatus (excludes _progress key)
+	// mediaStatus values are now {status, meta?} objects
 	let dlTotal   = $derived(Object.keys(mediaStatus).filter(k => k !== '_progress').length);
-	let dlReady   = $derived(Object.values(mediaStatus).filter(s => s === 'ready').length);
-	let dlFailed  = $derived(Object.values(mediaStatus).filter(s => s === 'failed').length);
-	let dlPending = $derived(Object.values(mediaStatus).filter(s => s === 'pending').length);
+	let dlReady   = $derived(Object.values(mediaStatus).filter(s => s?.status === 'ready').length);
+	let dlFailed  = $derived(Object.values(mediaStatus).filter(s => s?.status === 'failed').length);
+	let dlPending = $derived(Object.values(mediaStatus).filter(s => s?.status === 'pending').length);
 	let dlSettled = $derived(dlTotal > 0 && dlPending === 0);
 	let dlPct     = $derived(dlTotal > 0 ? Math.round(((dlReady + dlFailed) / dlTotal) * 100) : 0);
 
@@ -99,6 +99,27 @@
 	function localVideoSync(node) {
 		localVideoEl = node;
 		let suppressed = false; // true while we are applying a remote command
+		let audioSetup = false;
+		let audioCtx = null;
+
+		// ── Audio normalisation via Web Audio DynamicsCompressor ──────────────
+		function setupAudio() {
+			if (audioSetup) return;
+			audioSetup = true;
+			try {
+				audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+				const src = audioCtx.createMediaElementSource(node);
+				const comp = audioCtx.createDynamicsCompressor();
+				comp.threshold.value = -24;
+				comp.knee.value       = 30;
+				comp.ratio.value      = 12;
+				comp.attack.value     = 0.003;
+				comp.release.value    = 0.25;
+				src.connect(comp);
+				comp.connect(audioCtx.destination);
+				audioCtx.resume().catch(() => {});
+			} catch { /* Web Audio not available */ }
+		}
 
 		// ── Autoplay ──────────────────────────────────────────────────────────
 		node.play().catch(() => {
@@ -133,7 +154,7 @@
 			}
 		}
 
-		const onPlay        = () => sendPlayback('play');
+		const onPlay        = () => { setupAudio(); sendPlayback('play'); };
 		const onPause       = () => sendPlayback('pause');
 		const onSeeked      = () => sendPlayback('seek');
 		const onVolumeChange = () => sendMuteState();
@@ -178,6 +199,7 @@
 				delete node._applyRemote;
 				if (localVideoEl === node) localVideoEl = null;
 				localVideoMuted = false;
+				if (audioCtx) { audioCtx.close().catch(() => {}); audioCtx = null; }
 			}
 		};
 	}
@@ -293,7 +315,7 @@
 					spawnEmoji(msg.emoji, msg.user);
 				} else if (msg.type === 'show_ranking') {
 					ranking = await api(`/api/sessions/${session.id}/votes/ranking?top=5&bottom=5`, { token: authVal.token });
-					view = 'ranking';
+					startPlayoffOrRanking();
 				} else if (msg.type === 'note_update') {
 					noteText = msg.text;
 				} else if (msg.type === 'next_vote') {
@@ -331,6 +353,15 @@
 							[msg.user_id]: { playing: !!msg.playing, currentTime: msg.currentTime }
 						};
 					}
+				} else if (msg.type === 'cursor') {
+					const color = CURSOR_COLORS[msg.user_id % CURSOR_COLORS.length];
+					otherCursors = { ...otherCursors, [msg.user_id]: { x: msg.x, y: msg.y, user: msg.user, color } };
+				} else if (msg.type === 'playoff_vote') {
+					const pv = playoffVotes[msg.pair_idx] || {};
+					playoffVotes = { ...playoffVotes, [msg.pair_idx]: { ...pv, [msg.user_id]: msg.choice } };
+					if (msg.pair_idx === playoffIdx) checkPlayoffComplete();
+				} else if (msg.type === 'superfav') {
+					spawnEmoji('⭐', msg.user);
 				} else if (msg.type === 'join' || msg.type === 'leave') {
 					connectedUsers = msg.count;
 					syncMessage = `${msg.user} ${msg.type === 'join' ? 'se ha unido' : 'se ha ido'}`;
@@ -400,7 +431,7 @@
 				}
 
 				// Stop polling once everything is resolved
-				const pending = Object.values(statuses).some((s) => s === 'pending');
+				const pending = Object.values(statuses).some((s) => s?.status === 'pending');
 				if (!pending && mediaPoller) {
 					clearInterval(mediaPoller);
 					mediaPoller = null;
@@ -571,7 +602,7 @@
 				token: authVal.token
 			});
 			ranking = await api(`/api/sessions/${session.id}/votes/ranking?top=5&bottom=5`, { token: authVal.token });
-			view = 'ranking';
+			startPlayoffOrRanking();
 			if (timerInterval) clearInterval(timerInterval);
 		} catch (e) {
 			error = e.message;
@@ -701,6 +732,107 @@
 		return embedType === 'tiktok' || embedType === 'twitter';
 	}
 
+	// ── Superfavorites ────────────────────────────────────────────────────────
+	let superfavorites = $state([]);
+	$effect(() => {
+		if (!authVal?.token || !session) return;
+		if (session.status !== 'pending') return;
+		api('/api/sessions/superfavorites', { token: authVal.token })
+			.then(d => { superfavorites = d; })
+			.catch(() => {});
+	});
+
+	// ── Shared cursors ────────────────────────────────────────────────────────
+	const CURSOR_COLORS = ['#e53e3e', '#3182ce', '#38a169', '#d69e2e', '#805ad5', '#dd6b20'];
+	let otherCursors = $state({}); // {userId: {x, y, user, color}}
+	let _lastCursorSend = 0;
+	function onMouseMove(e) {
+		const now = Date.now();
+		if (now - _lastCursorSend < 50) return;
+		_lastCursorSend = now;
+		const x = Math.round((e.clientX / window.innerWidth) * 1000) / 10;
+		const y = Math.round((e.clientY / window.innerHeight) * 1000) / 10;
+		if (ws?.readyState === WebSocket.OPEN) {
+			ws.send(JSON.stringify({ type: 'cursor', x, y }));
+		}
+	}
+
+	// ── Playoff (tie-breaking) ────────────────────────────────────────────────
+	let playoffPairs = $state([]);
+	let playoffIdx = $state(0);
+	let playoffVotes = $state({});   // {pairIdx: {userId: 'a'|'b'}}
+	let playoffResults = $state({}); // {pairIdx: 'a'|'b'}
+
+	function detectTiesInEntries(entries) {
+		const pairs = [];
+		for (let i = 0; i < entries.length - 1; i++) {
+			if (entries[i].total_score === entries[i + 1].total_score) {
+				pairs.push({ a: entries[i], b: entries[i + 1] });
+			}
+		}
+		return pairs;
+	}
+
+	function startPlayoffOrRanking() {
+		const top5 = ranking.slice(0, 5);
+		const cringe = ranking.length > 5
+			? ranking.slice(-5).filter(b => !top5.find(t => t.meme_id === b.meme_id))
+			: [];
+		const ties = [...detectTiesInEntries(top5), ...detectTiesInEntries(cringe)];
+		if (ties.length > 0) {
+			playoffPairs = ties;
+			playoffIdx = 0;
+			playoffVotes = {};
+			playoffResults = {};
+			view = 'playoff';
+		} else {
+			view = 'ranking';
+		}
+	}
+
+	function castPlayoffVote(choice) {
+		const uid = authVal.user?.id;
+		if (!uid || playoffVotes[playoffIdx]?.[uid]) return;
+		playoffVotes = {
+			...playoffVotes,
+			[playoffIdx]: { ...(playoffVotes[playoffIdx] || {}), [uid]: choice }
+		};
+		if (ws?.readyState === WebSocket.OPEN) {
+			ws.send(JSON.stringify({ type: 'playoff_vote', pair_idx: playoffIdx, choice }));
+		}
+		checkPlayoffComplete();
+	}
+
+	function checkPlayoffComplete() {
+		const pairVotes = playoffVotes[playoffIdx] || {};
+		const allVoted = session?.participants.every(p => pairVotes[p.id]);
+		if (!allVoted) return;
+		const votesA = Object.values(pairVotes).filter(v => v === 'a').length;
+		const winner = votesA >= Object.keys(pairVotes).length / 2 ? 'a' : 'b';
+		playoffResults = { ...playoffResults, [playoffIdx]: winner };
+		setTimeout(() => {
+			if (playoffIdx < playoffPairs.length - 1) {
+				playoffIdx++;
+			} else {
+				view = 'ranking';
+			}
+		}, 1400);
+	}
+
+	function applyPlayoffs(entries) {
+		let result = [...entries];
+		Object.entries(playoffResults).forEach(([pIdxStr, winner]) => {
+			const pair = playoffPairs[parseInt(pIdxStr)];
+			if (!pair) return;
+			const posA = result.findIndex(e => e.meme_id === pair.a.meme_id);
+			const posB = result.findIndex(e => e.meme_id === pair.b.meme_id);
+			if (posA === -1 || posB === -1) return;
+			if (winner === 'b' && posA < posB) [result[posA], result[posB]] = [result[posB], result[posA]];
+			if (winner === 'a' && posB < posA) [result[posA], result[posB]] = [result[posB], result[posA]];
+		});
+		return result;
+	}
+
 	// ── Shared notepad ────────────────────────────────────────────────────────
 	let noteText = $state('');
 	let noteVisible = $state(false);
@@ -766,11 +898,29 @@
 		} catch {}
 	}
 
+	// ── Superfav auto-detect (all max votes) ─────────────────────────────────
+	let _superfavSent = $state(new Set());
+	$effect(() => {
+		if (!session?.session_memes || !votes.length) return;
+		const total = session.session_memes.length;
+		session.session_memes.forEach(sm => {
+			const mid = sm.meme.id;
+			if (_superfavSent.has(mid)) return;
+			const mVotes = votes.filter(v => v.meme_id === mid);
+			if (mVotes.length < session.participants.length) return;
+			if (!mVotes.every(v => v.value === total)) return;
+			_superfavSent = new Set([..._superfavSent, mid]);
+			if (ws?.readyState === WebSocket.OPEN) {
+				ws.send(JSON.stringify({ type: 'superfav', meme_id: mid }));
+			}
+		});
+	});
+
 	// ── Show ranking (shared with WS) ─────────────────────────────────────────
 	async function showRanking() {
 		ranking = await api(`/api/sessions/${session.id}/votes/ranking?top=5&bottom=5`, { token: authVal.token });
-		view = 'ranking';
 		if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'show_ranking' }));
+		startPlayoffOrRanking();
 	}
 
 	$effect(() => {
@@ -799,7 +949,20 @@
 
 </script>
 
-<div class="container">
+<!-- shared cursor overlay (fixed, outside the layout flow) -->
+{#each Object.entries(otherCursors) as [uid, cur]}
+	<div class="shared-cursor" style="left:{cur.x}%;top:{cur.y}%;--cc:{cur.color}">
+		<svg width="16" height="20" viewBox="0 0 16 20" fill="none">
+			<path d="M0 0 L0 16 L4 12 L7 19 L9 18 L6 11 L11 11 Z" fill="var(--cc)" stroke="#fff" stroke-width="1"/>
+		</svg>
+		<span class="shared-cursor-label">{cur.user}</span>
+	</div>
+{/each}
+
+<div class="session-page"
+	onmousemove={onMouseMove}
+	role="presentation"
+>
 	{#if error}
 		<p class="error">{error}</p>
 	{/if}
@@ -925,6 +1088,27 @@
 					</div>
 				{/if}
 
+				<!-- Superfavorites gallery (while waiting) -->
+				{#if superfavorites.length > 0}
+					<div class="superfav-gallery">
+						<p class="superfav-gallery-label">⭐ Super favoritos de otras sesiones</p>
+						<div class="superfav-grid">
+							{#each superfavorites.slice(0, 12) as sf}
+								{@const sfEmbed = detectEmbed(sf.url)}
+								<a href={sf.url} target="_blank" rel="noopener noreferrer" class="superfav-cell">
+									{#if sfEmbed.type === 'image'}
+										<img src={sf.url} alt="" loading="lazy" referrerpolicy="no-referrer" />
+									{:else if sfEmbed.thumbnailUrl}
+										<img src={sfEmbed.thumbnailUrl} alt="" loading="lazy" referrerpolicy="no-referrer" />
+									{:else}
+										<span class="superfav-cell-icon">{({tiktok:'🎵',twitter:'🐦',youtube:'▶️',instagram:'📸',image:'🖼️'})[sfEmbed.type] ?? '⭐'}</span>
+									{/if}
+								</a>
+							{/each}
+						</div>
+					</div>
+				{/if}
+
 				<!-- Cancel session — only creator, only during pending -->
 				{#if session.created_by === authVal.user?.id}
 					<button class="btn-cancel-session" onclick={cancelSession}>
@@ -972,6 +1156,16 @@
 							</span>
 							<span class="meme-author">by {session.participants.find(p => p.id === sm.meme.user_id)?.display_name || '?'}</span>
 						</div>
+						{#if mediaStatus[String(sm.meme.id)]?.meta}
+							{@const meta = mediaStatus[String(sm.meme.id)].meta}
+							<div class="meme-meta-row">
+								{#if meta.uploader}<span class="meta-chip meta-uploader">👤 {meta.uploader}</span>{/if}
+								{#if meta.view_count}<span class="meta-chip">👁 {meta.view_count >= 1_000_000 ? (meta.view_count/1_000_000).toFixed(1)+'M' : meta.view_count >= 1_000 ? (meta.view_count/1_000).toFixed(0)+'K' : meta.view_count}</span>{/if}
+								{#if meta.like_count}<span class="meta-chip">❤️ {meta.like_count >= 1_000_000 ? (meta.like_count/1_000_000).toFixed(1)+'M' : meta.like_count >= 1_000 ? (meta.like_count/1_000).toFixed(0)+'K' : meta.like_count}</span>{/if}
+								{#if meta.comment_count}<span class="meta-chip">💬 {meta.comment_count >= 1_000 ? (meta.comment_count/1_000).toFixed(0)+'K' : meta.comment_count}</span>{/if}
+								{#if meta.duration}<span class="meta-chip">⏱ {meta.duration >= 60 ? Math.floor(meta.duration/60)+'m' + (meta.duration%60 > 0 ? (meta.duration%60)+'s' : '') : meta.duration+'s'}</span>{/if}
+							</div>
+						{/if}
 
 						{#key sm.meme.id}
 						{#if embed.type === 'youtube' && embed.embedUrl}
@@ -982,7 +1176,7 @@
 								allowfullscreen={true}
 								class="embed-frame"
 							></iframe>
-						{:else if embed.type === 'tiktok' && mediaStatus[String(sm.meme.id)] === 'ready'}
+						{:else if embed.type === 'tiktok' && mediaStatus[String(sm.meme.id)]?.status === 'ready'}
 							<div class="sync-media-wrap">
 								<!-- Local download — plain <video> bypasses all autoplay/iframe restrictions -->
 								<video
@@ -999,7 +1193,7 @@
 							</div>
 						{:else if embed.type === 'tiktok' && embed.embedUrl}
 							<div class="sync-media-wrap">
-								{#if mediaStatus[String(sm.meme.id)] === 'pending'}
+								{#if mediaStatus[String(sm.meme.id)]?.status === 'pending'}
 									<div class="media-loading">⏬ Cargando vídeo local…</div>
 								{/if}
 								<iframe
@@ -1017,7 +1211,7 @@
 								allowfullscreen={true}
 								class="embed-frame instagram-frame"
 							></iframe>
-						{:else if embed.type === 'twitter' && mediaStatus[String(sm.meme.id)] === 'ready'}
+						{:else if embed.type === 'twitter' && mediaStatus[String(sm.meme.id)]?.status === 'ready'}
 							<div class="sync-media-wrap">
 								<video
 									src="/api/sessions/{session.id}/media/{sm.meme.id}?token={authVal.token}"
@@ -1033,7 +1227,7 @@
 							</div>
 						{:else if embed.type === 'twitter'}
 							<div class="sync-media-wrap">
-								{#if mediaStatus[String(sm.meme.id)] === 'pending'}
+								{#if mediaStatus[String(sm.meme.id)]?.status === 'pending'}
 									<div class="media-loading">⏬ Cargando vídeo local…</div>
 								{/if}
 								{#if twitterEmbeds[sm.meme.id]}
@@ -1117,6 +1311,15 @@
 							{/if}
 						</div>
 
+						<!-- Superfav auto-trigger: if all voted max, show ⭐ flash -->
+						{#if (() => {
+							const mVotes = votes.filter(v => v.meme_id === sm.meme.id);
+							const total = session.session_memes.length;
+							return mVotes.length >= session.participants.length && mVotes.every(v => v.value === total);
+						})()}
+							<div class="superfav-flash">⭐ ¡SUPER FAVORITO!</div>
+						{/if}
+
 						<!-- Reaction buttons during review -->
 						<div class="fun-buttons-wrap fun-buttons-review">
 							<div class="fun-buttons">
@@ -1173,6 +1376,56 @@
 				{/if}
 
 				</div><!-- /presentation-wrap -->
+			{/if}
+		{/if}
+
+		<!-- PLAYOFF VIEW (tie-breaking) -->
+		{#if view === 'playoff'}
+			{@const pair = playoffPairs[playoffIdx]}
+			{#if pair}
+				<div class="playoff-view">
+					<div class="playoff-header">
+						<h3>⚔️ Desempate {playoffIdx + 1}/{playoffPairs.length}</h3>
+						<p class="playoff-sub">¿Cuál es mejor?</p>
+					</div>
+					<div class="playoff-pair">
+						{#each [{key:'a', entry: pair.a}, {key:'b', entry: pair.b}] as side}
+							{@const embed = detectEmbed(side.entry.url)}
+							{@const previewSrc = rankingPreviewSrc(side.entry)}
+							{@const myChoice = playoffVotes[playoffIdx]?.[authVal.user?.id]}
+							{@const result = playoffResults[playoffIdx]}
+							<button
+								class="playoff-card"
+								class:selected={myChoice === side.key}
+								class:winner={result === side.key}
+								class:loser={result && result !== side.key}
+								onclick={() => castPlayoffVote(side.key)}
+								disabled={!!myChoice}
+							>
+								<div class="playoff-thumb">
+									{#if previewSrc}
+										<img src={previewSrc} alt="" loading="lazy" referrerpolicy="no-referrer"/>
+									{:else}
+										<span class="playoff-icon">{({tiktok:'🎵',twitter:'🐦',youtube:'▶️',instagram:'📸',image:'🖼️',link:'🔗'})[embed.type] ?? '🔗'}</span>
+									{/if}
+								</div>
+								<div class="playoff-info">
+									<span class="playoff-score">{Math.round(side.entry.total_score / (side.entry.vote_count || 1) / session.session_memes.length * 100)}%</span>
+									<span class="playoff-submitter">por {side.entry.submitted_by}</span>
+								</div>
+								{#if result === side.key}<div class="playoff-winner-badge">✅ Ganador</div>{/if}
+							</button>
+						{/each}
+					</div>
+					<div class="playoff-voters">
+						{#each session.participants as p}
+							{@const voted = !!playoffVotes[playoffIdx]?.[p.id]}
+							<span class="playoff-voter-chip" class:voted>
+								{p.display_name.slice(0,1).toUpperCase()} {voted ? '✓' : '…'}
+							</span>
+						{/each}
+					</div>
+				</div>
 			{/if}
 		{/if}
 
@@ -2222,6 +2475,199 @@
 	.ranking-label-cringe {
 		background: rgba(229,62,62,0.1);
 		color: var(--accent);
+	}
+
+	/* ── Session page (full-width) ── */
+	.session-page {
+		width: 100%;
+		max-width: 100%;
+		padding: 0 1rem;
+		box-sizing: border-box;
+	}
+
+	/* ── Shared cursors ── */
+	.shared-cursor {
+		position: fixed;
+		pointer-events: none;
+		z-index: 9998;
+		transform: translate(-4px, -4px);
+		transition: left 0.06s linear, top 0.06s linear;
+		display: flex;
+		align-items: flex-start;
+		gap: 4px;
+	}
+	.shared-cursor-label {
+		font-size: 0.65rem;
+		background: var(--cc, #e53e3e);
+		color: #fff;
+		border-radius: 6px;
+		padding: 1px 5px;
+		margin-top: 14px;
+		white-space: nowrap;
+		box-shadow: 0 1px 4px rgba(0,0,0,0.4);
+	}
+
+	/* ── TikTok/video metadata row ── */
+	.meme-meta-row {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.3rem 0.5rem;
+		width: 100%;
+		padding: 0 0.1rem;
+	}
+	.meta-chip {
+		font-size: 0.72rem;
+		background: rgba(255,255,255,0.06);
+		border: 1px solid rgba(255,255,255,0.1);
+		border-radius: 6px;
+		padding: 1px 6px;
+		color: var(--text-muted);
+		white-space: nowrap;
+	}
+	.meta-uploader {
+		color: var(--text);
+		font-weight: 600;
+		background: rgba(229,62,62,0.08);
+		border-color: rgba(229,62,62,0.18);
+	}
+
+	/* ── Superfav flash ── */
+	.superfav-flash {
+		text-align: center;
+		font-size: 1rem;
+		font-weight: 800;
+		color: #f6e05e;
+		text-shadow: 0 0 12px rgba(246,224,94,0.6);
+		animation: superfav-pop 0.4s ease-out;
+		letter-spacing: 0.05em;
+	}
+	@keyframes superfav-pop {
+		0%   { transform: scale(0.5); opacity: 0; }
+		70%  { transform: scale(1.1); opacity: 1; }
+		100% { transform: scale(1);   opacity: 1; }
+	}
+
+	/* ── Superfavorites pending gallery ── */
+	.superfav-gallery {
+		margin-top: 1.5rem;
+		width: 100%;
+		max-width: 400px;
+	}
+	.superfav-gallery-label {
+		font-size: 0.78rem;
+		color: var(--text-muted);
+		margin: 0 0 0.5rem;
+		text-align: center;
+	}
+	.superfav-grid {
+		display: grid;
+		grid-template-columns: repeat(4, 1fr);
+		gap: 4px;
+	}
+	.superfav-cell {
+		aspect-ratio: 1;
+		border-radius: 6px;
+		overflow: hidden;
+		background: rgba(255,255,255,0.05);
+		border: 1px solid rgba(255,255,255,0.08);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		text-decoration: none;
+		transition: transform 0.15s;
+	}
+	.superfav-cell:hover { transform: scale(1.04); }
+	.superfav-cell img { width: 100%; height: 100%; object-fit: cover; }
+	.superfav-cell-icon { font-size: 1.4rem; }
+
+	/* ── Playoff view ── */
+	.playoff-view {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 1.25rem;
+		padding: 1rem 0;
+	}
+	.playoff-header { text-align: center; }
+	.playoff-header h3 { margin: 0; font-size: 1.3rem; }
+	.playoff-sub { margin: 0.25rem 0 0; color: var(--text-muted); font-size: 0.85rem; }
+	.playoff-pair {
+		display: flex;
+		gap: 1rem;
+		width: 100%;
+		max-width: 600px;
+	}
+	.playoff-card {
+		flex: 1;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 0.6rem;
+		background: rgba(255,255,255,0.04);
+		border: 2px solid rgba(255,255,255,0.1);
+		border-radius: 14px;
+		padding: 1rem;
+		cursor: pointer;
+		transition: background 0.15s, border-color 0.15s, transform 0.15s;
+		position: relative;
+	}
+	.playoff-card:hover:not(:disabled):not(.selected) {
+		background: rgba(255,255,255,0.08);
+		transform: scale(1.02);
+	}
+	.playoff-card.selected {
+		border-color: var(--accent);
+		background: rgba(229,62,62,0.1);
+	}
+	.playoff-card.winner {
+		border-color: #68d391;
+		background: rgba(104,211,145,0.1);
+		animation: winner-glow 0.6s ease-out;
+	}
+	.playoff-card.loser { opacity: 0.4; }
+	@keyframes winner-glow {
+		0%   { box-shadow: 0 0 0 0 rgba(104,211,145,0); }
+		50%  { box-shadow: 0 0 20px 6px rgba(104,211,145,0.4); }
+		100% { box-shadow: 0 0 0 0 rgba(104,211,145,0); }
+	}
+	.playoff-card:disabled { cursor: default; }
+	.playoff-thumb {
+		width: 100%;
+		aspect-ratio: 1;
+		border-radius: 10px;
+		overflow: hidden;
+		background: rgba(255,255,255,0.06);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+	}
+	.playoff-thumb img { width: 100%; height: 100%; object-fit: cover; }
+	.playoff-icon { font-size: 2.5rem; }
+	.playoff-info { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+	.playoff-score { font-size: 1.1rem; font-weight: 700; }
+	.playoff-submitter { font-size: 0.72rem; color: var(--text-muted); }
+	.playoff-winner-badge {
+		position: absolute;
+		top: 0.5rem; right: 0.5rem;
+		font-size: 0.72rem;
+		font-weight: 700;
+		color: #68d391;
+	}
+	.playoff-voters {
+		display: flex;
+		gap: 0.4rem;
+	}
+	.playoff-voter-chip {
+		font-size: 0.72rem;
+		background: rgba(255,255,255,0.06);
+		border-radius: 8px;
+		padding: 2px 8px;
+		color: var(--text-muted);
+		transition: background 0.2s, color 0.2s;
+	}
+	.playoff-voter-chip.voted {
+		background: rgba(104,211,145,0.15);
+		color: #68d391;
 	}
 
 	.media-loading {

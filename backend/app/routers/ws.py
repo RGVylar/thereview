@@ -220,6 +220,42 @@ async def session_ws(websocket: WebSocket, session_id: int, token: str = Query(.
                     {"type": "next_vote", "user_id": user_id, "user": display_name},
                 )
 
+            elif msg_type == "cursor":
+                await _broadcast(
+                    session_id,
+                    {"type": "cursor", "x": msg.get("x"), "y": msg.get("y"),
+                     "user_id": user_id, "user": display_name},
+                    exclude_uid=user_id,
+                )
+
+            elif msg_type == "playoff_vote":
+                await _broadcast(
+                    session_id,
+                    {"type": "playoff_vote", "pair_idx": msg.get("pair_idx"),
+                     "choice": msg.get("choice"), "user_id": user_id, "user": display_name},
+                )
+
+            elif msg_type == "superfav":
+                meme_id = msg.get("meme_id")
+                if meme_id:
+                    def _save_superfav(sid=session_id, mid=meme_id):
+                        _db = SessionLocal()
+                        try:
+                            from app.models import SuperFavorite as _SF
+                            if not _db.query(_SF).filter_by(meme_id=mid).first():
+                                _db.add(_SF(session_id=sid, meme_id=mid))
+                                _db.commit()
+                        except Exception:
+                            pass
+                        finally:
+                            _db.close()
+                    import asyncio
+                    asyncio.get_event_loop().run_in_executor(None, _save_superfav)
+                await _broadcast(
+                    session_id,
+                    {"type": "superfav", "meme_id": meme_id, "user": display_name},
+                )
+
             elif msg_type == "show_ranking":
                 await _broadcast(
                     session_id,

@@ -1,3 +1,4 @@
+import json
 import random
 from datetime import datetime, timezone
 from pathlib import Path
@@ -9,7 +10,7 @@ from sqlalchemy.orm import Session as DBSession, joinedload
 from app.auth import get_current_user
 from app.database import get_db
 from app.downloader import cleanup_session_media, download_and_update, get_session_progress, is_downloadable, media_path
-from app.models import MediaCache, Meme, Session, SessionMeme, SessionStatus, SessionUser, User
+from app.models import MediaCache, Meme, Session, SessionMeme, SessionStatus, SessionUser, SuperFavorite, User
 from app.schemas import SessionCreate, SessionDetail, SessionOut
 
 router = APIRouter(prefix="/api/sessions", tags=["sessions"])
@@ -150,6 +151,27 @@ def create_session(
         background_tasks.add_task(download_and_update, session.id, meme_id, url)
 
     return _session_to_out(session, len(memes))
+
+
+# ── Superfavorites ────────────────────────────────────────────────────────────
+
+@router.get("/superfavorites")
+def list_superfavorites(
+    db: DBSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Return the most recent super-favorites (shown during session loading)."""
+    sfavs = (
+        db.query(SuperFavorite)
+        .join(Meme, Meme.id == SuperFavorite.meme_id)
+        .order_by(SuperFavorite.created_at.desc())
+        .limit(30)
+        .all()
+    )
+    return [
+        {"meme_id": s.meme_id, "url": str(s.meme.url), "created_at": s.created_at.isoformat()}
+        for s in sfavs
+    ]
 
 
 # ── List ──────────────────────────────────────────────────────────────────────
@@ -308,7 +330,15 @@ def get_media_status(
     _assert_participant(session, current_user.id)
 
     rows = db.query(MediaCache).filter(MediaCache.session_id == session_id).all()
-    result: dict = {str(r.meme_id): r.status for r in rows}
+    result: dict = {}
+    for r in rows:
+        entry: dict = {"status": r.status}
+        if r.metadata:
+            try:
+                entry["meta"] = json.loads(r.metadata)
+            except Exception:
+                pass
+        result[str(r.meme_id)] = entry
     progress = get_session_progress(session_id)
     if progress:
         result["_progress"] = progress

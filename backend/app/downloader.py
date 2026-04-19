@@ -107,7 +107,7 @@ def download_and_update(session_id: int, meme_id: int, url: str) -> None:
         with _progress_lock:
             _download_progress[(session_id, meme_id)] = {"downloaded": 0, "total": 0, "speed": 0.0}
 
-        _run_ytdlp(out, url, session_id, meme_id)
+        meta = _run_ytdlp(out, url, session_id, meme_id)
 
         # Re-fetch — session may have been deleted while downloading
         cache = db.query(MediaCache).filter_by(session_id=session_id, meme_id=meme_id).first()
@@ -118,6 +118,9 @@ def download_and_update(session_id: int, meme_id: int, url: str) -> None:
 
         if out.exists():
             cache.status = "ready"
+            if meta:
+                import json
+                cache.metadata = json.dumps(meta, ensure_ascii=False)
         else:
             cache.status = "failed"
             cache.error = "yt-dlp produced no output file"
@@ -141,13 +144,21 @@ def download_and_update(session_id: int, meme_id: int, url: str) -> None:
         db.close()
 
 
-def _run_ytdlp(out: Path, url: str, session_id: int, meme_id: int) -> None:
-    """Run yt-dlp via its Python API (no subprocess overhead)."""
+_META_FIELDS = (
+    "uploader", "uploader_id", "uploader_url",
+    "like_count", "comment_count", "view_count",
+    "duration", "title", "description",
+)
+
+
+def _run_ytdlp(out: Path, url: str, session_id: int, meme_id: int) -> dict:
+    """Run yt-dlp via its Python API.  Returns extracted metadata dict (may be empty)."""
     try:
         import yt_dlp
     except ImportError:
         raise RuntimeError("yt-dlp not installed in this environment")
 
+    meta: dict = {}
     with _DL_SEMAPHORE:
         ydl_opts = {
             "outtmpl": str(out),
@@ -164,7 +175,10 @@ def _run_ytdlp(out: Path, url: str, session_id: int, meme_id: int) -> None:
             "progress_hooks": [_make_progress_hook(session_id, meme_id)],
         }
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            ydl.download([url])
+            ie = ydl.extract_info(url, download=True)
+            if ie:
+                meta = {k: ie[k] for k in _META_FIELDS if ie.get(k) is not None}
+    return meta
 
 
 def cleanup_session_media(session_id: int) -> None:

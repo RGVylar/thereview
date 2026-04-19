@@ -162,7 +162,26 @@ class MediaCache(Base):
         String(20), nullable=False, default=MediaStatus.PENDING
     )  # pending | ready | failed
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # JSON blob with yt-dlp extracted metadata (uploader, like_count, view_count, etc.)
+    metadata: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     __table_args__ = (
         UniqueConstraint("session_id", "meme_id", name="uq_media_session_meme"),
+    )
+
+
+class SuperFavorite(Base):
+    """Memes that ALL participants voted at max score — saved for entertainment during loading."""
+
+    __tablename__ = "super_favorites"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    meme_id: Mapped[int] = mapped_column(ForeignKey("memes.id", ondelete="CASCADE"), nullable=False)
+    session_id: Mapped[int] = mapped_column(ForeignKey("sessions.id", ondelete="CASCADE"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    meme: Mapped["Meme"] = relationship()
+
+    __table_args__ = (
+        UniqueConstraint("meme_id", name="uq_superfav_meme"),
     )
