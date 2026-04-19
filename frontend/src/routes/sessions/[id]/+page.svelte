@@ -902,48 +902,40 @@
 							<div class="rank-slider-wrap">
 								<span class="rank-edge rank-bad">💀<br><small>Peor</small></span>
 								<div class="rank-slider-track">
+									{#if sliderVal !== null}
+										<div class="rank-badge" style="left: {rankPct * 100}%">{sliderVal}</div>
+									{/if}
 									<input
 										type="range"
 										min="0"
 										max={totalMemes}
 										value={sliderVal ?? Math.round(totalMemes / 2)}
 										class="rank-slider"
-										oninput={(e) => { /* visual update handled by binding */ }}
 										onchange={(e) => castVote(sm.meme.id, +e.target.value)}
 									/>
-									{#if sliderVal !== null}
-										<div class="rank-slider-fill" style="width: {rankPct * 100}%"></div>
-										<div class="rank-badge" style="left: calc({rankPct * 100}% - 16px)">
-											{sliderVal}
-										</div>
-									{/if}
-									<div class="rank-zone rank-zone-bad"  style="width:33%"></div>
-									<div class="rank-zone rank-zone-mid"  style="width:34%; left:33%"></div>
-									<div class="rank-zone rank-zone-good" style="width:33%; left:67%"></div>
+									<!-- Other users' votes as dots below the track -->
+									{#each votes.filter(v => v.meme_id === sm.meme.id && v.user_id !== authVal.user?.id) as ov}
+										{@const participant = session.participants.find(p => p.id === ov.user_id)}
+										<span
+											class="other-vote-dot"
+											title="{participant?.display_name}: {ov.value}/{totalMemes}"
+											style="left: {(ov.value / totalMemes) * 100}%"
+										></span>
+									{/each}
 								</div>
 								<span class="rank-edge rank-good">🏆<br><small>Mejor</small></span>
 							</div>
 							{#if sliderVal === null}
-								<p class="rank-hint">← Desliza para colocar este meme en el ranking</p>
+								<p class="rank-hint">Desliza para colocar este meme en el ranking</p>
 							{:else}
 								<p class="rank-hint">
 									Puesto <strong>{sliderVal}</strong> de {totalMemes}
-									{#if rankPct < 0.33} · zona baja 💀
-									{:else if rankPct < 0.67} · zona media 😐
-									{:else} · zona alta 🔥
+									· {#if rankPct < 0.25}💀 fondo
+									{:else if rankPct < 0.5}😐 medio-bajo
+									{:else if rankPct < 0.75}😄 medio-alto
+									{:else}🔥 top
 									{/if}
 								</p>
-							{/if}
-							<!-- Other users' votes as dots on slider -->
-							{#if votes.filter(v => v.meme_id === sm.meme.id && v.user_id !== authVal.user?.id).length > 0}
-								<div class="other-votes">
-									{#each votes.filter(v => v.meme_id === sm.meme.id && v.user_id !== authVal.user?.id) as ov}
-										{@const participant = session.participants.find(p => p.id === ov.user_id)}
-										<span class="other-vote-dot" title="{participant?.display_name}: {ov.value}/{totalMemes}"
-											style="left: calc({(ov.value / totalMemes) * 100}% - 6px)">
-										</span>
-									{/each}
-								</div>
 							{/if}
 						</div>
 
@@ -1149,8 +1141,8 @@
 		display: flex;
 		flex-direction: column;
 		align-items: center;
-		gap: 0.4rem;
-		padding: 0.75rem 0;
+		gap: 0.5rem;
+		padding: 0.75rem 0 0.25rem;
 		width: 100%;
 	}
 	.rank-slider-wrap {
@@ -1158,108 +1150,145 @@
 		align-items: center;
 		gap: 0.75rem;
 		width: 100%;
-		max-width: 480px;
+		max-width: 500px;
 	}
 	.rank-edge {
-		font-size: 1.3rem;
+		font-size: 1.4rem;
 		text-align: center;
 		line-height: 1.2;
 		flex-shrink: 0;
+		user-select: none;
 	}
-	.rank-edge small { font-size: 0.6rem; color: var(--text-muted); }
-	.rank-bad  { opacity: 0.7; }
-	.rank-good { opacity: 0.9; }
+	.rank-edge small { font-size: 0.58rem; color: var(--text-muted); display: block; }
 
 	.rank-slider-track {
 		position: relative;
 		flex: 1;
-		height: 36px;
+		height: 48px; /* tall enough for badge + dots */
 		display: flex;
 		align-items: center;
 	}
-	/* coloured background zones */
-	.rank-zone {
-		position: absolute;
-		height: 8px;
-		top: 50%;
-		transform: translateY(-50%);
-		border-radius: 4px;
-		pointer-events: none;
-	}
-	.rank-zone-bad  { background: rgba(229,62,62,0.25); border-radius: 4px 0 0 4px; }
-	.rank-zone-mid  { background: rgba(236,201,75,0.2); border-radius: 0; }
-	.rank-zone-good { background: rgba(72,187,120,0.25); border-radius: 0 4px 4px 0; }
 
+	/* The badge floats above the thumb */
+	.rank-badge {
+		position: absolute;
+		top: 0;
+		transform: translateX(-50%);
+		background: var(--accent);
+		color: #fff;
+		font-size: 0.8rem;
+		font-weight: 700;
+		min-width: 28px;
+		text-align: center;
+		padding: 1px 6px;
+		border-radius: 8px;
+		pointer-events: none;
+		z-index: 5;
+		transition: left 0.05s;
+		box-shadow: 0 2px 6px rgba(0,0,0,0.35);
+	}
+	.rank-badge::after {
+		content: '';
+		position: absolute;
+		bottom: -4px;
+		left: 50%;
+		transform: translateX(-50%);
+		border: 4px solid transparent;
+		border-top-color: var(--accent);
+		border-bottom: none;
+	}
+
+	/* The actual range input — gradient lives on the track pseudo-element */
 	.rank-slider {
-		position: relative;
-		z-index: 2;
 		width: 100%;
 		-webkit-appearance: none;
 		appearance: none;
-		height: 8px;
-		border-radius: 4px;
-		background: transparent;
+		height: 14px;
+		border-radius: 7px;
+		background: transparent; /* gradient is on ::track below */
 		outline: none;
 		cursor: pointer;
+		position: relative;
+		z-index: 3;
+	}
+	.rank-slider::-webkit-slider-runnable-track {
+		height: 14px;
+		border-radius: 7px;
+		background: linear-gradient(to right,
+			#c53030 0%,
+			#e53e3e 15%,
+			#ed8936 35%,
+			#ecc94b 55%,
+			#68d391 75%,
+			#38a169 100%
+		);
+		box-shadow: inset 0 1px 3px rgba(0,0,0,0.3);
+	}
+	.rank-slider::-moz-range-track {
+		height: 14px;
+		border-radius: 7px;
+		background: linear-gradient(to right,
+			#c53030 0%,
+			#e53e3e 15%,
+			#ed8936 35%,
+			#ecc94b 55%,
+			#68d391 75%,
+			#38a169 100%
+		);
 	}
 	.rank-slider::-webkit-slider-thumb {
 		-webkit-appearance: none;
 		appearance: none;
-		width: 22px;
-		height: 22px;
+		width: 28px;
+		height: 28px;
 		border-radius: 50%;
-		background: var(--accent);
-		border: 2px solid #fff;
-		box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+		background: #fff;
+		border: 3px solid rgba(0,0,0,0.15);
+		box-shadow: 0 2px 8px rgba(0,0,0,0.45), 0 0 0 2px rgba(255,255,255,0.3);
 		cursor: grab;
-		transition: transform 0.1s;
-	}
-	.rank-slider:active::-webkit-slider-thumb { transform: scale(1.2); cursor: grabbing; }
-	.rank-slider::-moz-range-thumb {
-		width: 22px; height: 22px;
-		border-radius: 50%;
-		background: var(--accent);
-		border: 2px solid #fff;
-		cursor: grab;
-	}
-
-	.rank-badge {
-		position: absolute;
-		top: -24px;
-		background: var(--accent);
-		color: #fff;
-		font-size: 0.75rem;
-		font-weight: 700;
-		padding: 1px 6px;
-		border-radius: 6px;
-		pointer-events: none;
-		z-index: 3;
-		white-space: nowrap;
-	}
-
-	.rank-hint {
-		font-size: 0.82rem;
-		color: var(--text-muted);
-		margin: 0;
-	}
-	.rank-hint strong { color: var(--text); }
-
-	.other-votes {
+		transition: transform 0.12s, box-shadow 0.12s;
 		position: relative;
-		width: 100%;
-		max-width: 480px;
-		height: 12px;
-		margin-top: 2px;
+		z-index: 4;
 	}
+	.rank-slider:hover::-webkit-slider-thumb {
+		transform: scale(1.1);
+		box-shadow: 0 3px 12px rgba(0,0,0,0.5), 0 0 0 3px rgba(255,255,255,0.4);
+	}
+	.rank-slider:active::-webkit-slider-thumb {
+		transform: scale(1.18);
+		cursor: grabbing;
+	}
+	.rank-slider::-moz-range-thumb {
+		width: 28px; height: 28px;
+		border-radius: 50%;
+		background: #fff;
+		border: 3px solid rgba(0,0,0,0.15);
+		box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+		cursor: grab;
+	}
+
+	/* Dots: other users' votes, positioned below track */
 	.other-vote-dot {
 		position: absolute;
+		bottom: 2px;
 		width: 10px;
 		height: 10px;
 		border-radius: 50%;
-		background: rgba(144, 205, 244, 0.7);
-		border: 1px solid rgba(144,205,244,0.9);
-		top: 1px;
+		background: #90cdf4;
+		border: 2px solid #63b3ed;
+		transform: translateX(-50%);
+		pointer-events: none;
+		z-index: 2;
+		box-shadow: 0 1px 3px rgba(0,0,0,0.3);
 	}
+
+	.rank-hint {
+		font-size: 0.83rem;
+		color: var(--text-muted);
+		margin: 0;
+		text-align: center;
+	}
+	.rank-hint strong { color: var(--text); font-size: 1rem; }
 
 	/* Nav */
 	.nav-buttons {
