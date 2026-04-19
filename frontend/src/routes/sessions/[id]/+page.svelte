@@ -290,7 +290,7 @@
 					if (msg.emoji === '🐒') playMonkeySound();
 					spawnEmoji(msg.emoji, msg.user);
 				} else if (msg.type === 'show_ranking') {
-					ranking = await api(`/api/sessions/${session.id}/votes/ranking`, { token: authVal.token });
+					ranking = await api(`/api/sessions/${session.id}/votes/ranking?top=3&bottom=3`, { token: authVal.token });
 					view = 'ranking';
 				} else if (msg.type === 'play_sync') {
 					// legacy — absorbed by playback system
@@ -410,7 +410,7 @@
 			session = await api(`/api/sessions/${id}`, { token: authVal.token });
 			votes = await api(`/api/sessions/${id}/votes`, { token: authVal.token });
 			if (session.status === 'finished') {
-				ranking = await api(`/api/sessions/${id}/votes/ranking`, { token: authVal.token });
+				ranking = await api(`/api/sessions/${id}/votes/ranking?top=3&bottom=3`, { token: authVal.token });
 				view = 'ranking';
 			}
 			if (session.status === 'pending' || session.status === 'active') {
@@ -553,7 +553,7 @@
 				method: 'POST',
 				token: authVal.token
 			});
-			ranking = await api(`/api/sessions/${session.id}/votes/ranking`, { token: authVal.token });
+			ranking = await api(`/api/sessions/${session.id}/votes/ranking?top=3&bottom=3`, { token: authVal.token });
 			view = 'ranking';
 			if (timerInterval) clearInterval(timerInterval);
 		} catch (e) {
@@ -999,7 +999,7 @@
 						</button>
 						{#if currentIndex === session.session_memes.length - 1}
 							<button class="btn-primary" onclick={async () => {
-								ranking = await api(`/api/sessions/${session.id}/votes/ranking`, { token: authVal.token });
+								ranking = await api(`/api/sessions/${session.id}/votes/ranking?top=3&bottom=3`, { token: authVal.token });
 								view = 'ranking';
 								if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'show_ranking' }));
 							}}>

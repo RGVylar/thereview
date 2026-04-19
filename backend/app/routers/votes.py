@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func
 from sqlalchemy.orm import Session as DBSession
 
@@ -93,6 +93,8 @@ def list_votes(
 @router.get("/ranking", response_model=list[RankingEntry])
 def get_ranking(
     session_id: int,
+    top: int = Query(default=0, ge=0, le=50),
+    bottom: int = Query(default=0, ge=0, le=50),
     db: DBSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -115,7 +117,18 @@ def get_ranking(
         .all()
     )
 
-    urls = [r.url for r in results]
+    # If top/bottom requested, return only those slices (avoids thumbnail
+    # fetches for hundreds of memes we'll never display).
+    if top > 0 or bottom > 0:
+        top_rows = results[:top] if top > 0 else []
+        # Avoid duplicates if top and bottom overlap
+        top_ids = {r.meme_id for r in top_rows}
+        bottom_rows = [r for r in results[-bottom:] if r.meme_id not in top_ids] if bottom > 0 else []
+        selected = top_rows + bottom_rows
+    else:
+        selected = results
+
+    urls = [r.url for r in selected]
     thumbs = batch_embed_thumbnails(urls)
 
     return [
@@ -127,5 +140,5 @@ def get_ranking(
             vote_count=r.vote_count,
             thumbnail_url=thumbs.get(r.url),
         )
-        for r in results
+        for r in selected
     ]
