@@ -44,6 +44,14 @@
 	let mediaStatus = $state({});
 	let mediaPoller = null;
 
+	// Download progress derived from mediaStatus
+	let dlTotal   = $derived(Object.keys(mediaStatus).length);
+	let dlReady   = $derived(Object.values(mediaStatus).filter(s => s === 'ready').length);
+	let dlFailed  = $derived(Object.values(mediaStatus).filter(s => s === 'failed').length);
+	let dlPending = $derived(Object.values(mediaStatus).filter(s => s === 'pending').length);
+	let dlSettled = $derived(dlTotal > 0 && dlPending === 0);
+	let dlPct     = $derived(dlTotal > 0 ? Math.round(((dlReady + dlFailed) / dlTotal) * 100) : 0);
+
 	// Reference to the currently mounted local <video> element (if any).
 	// Managed by the localVideoSync Svelte action.
 	let localVideoEl = null;
@@ -388,6 +396,19 @@
 		}
 	});
 
+	// Auto-start when all participants ready AND all downloads settled
+	let _autoStarted = false;
+	$effect(() => {
+		if (_autoStarted) return;
+		if (!session || session.status !== 'pending') return;
+		if (!authVal?.user?.id || session.created_by !== authVal.user.id) return;
+		const allReady = readyUserIds.length >= session.participants.length;
+		if (!allReady) return;
+		if (dlTotal === 0 || !dlSettled) return; // wait for downloads
+		_autoStarted = true;
+		startSession();
+	});
+
 	async function startSession() {
 		try {
 			session = await api(`/api/sessions/${session.id}/start`, {
@@ -593,14 +614,32 @@
 					<button class="btn-primary big-btn" onclick={handleReady}>
 						✋ ¡Estoy listo!
 					</button>
-				{:else}
+				{:else if readyUserIds.length < session.participants.length}
 					<p class="ready-msg">Esperando al resto…</p>
-				{/if}
-
-				{#if session.created_by === authVal.user?.id && readyUserIds.length >= session.participants.length}
-					<button class="btn-primary big-btn start-btn" onclick={startSession}>
-						▶️ ¡Todos listos! Iniciar
-					</button>
+				{:else if dlTotal > 0 && !dlSettled}
+					<!-- Everyone ready — waiting for downloads -->
+					<div class="dl-progress-wrap">
+						<p class="dl-progress-label">
+							⏬ Descargando vídeos… {dlReady + dlFailed}/{dlTotal}
+							{#if dlFailed > 0}<span class="dl-failed">({dlFailed} no disponibles)</span>{/if}
+						</p>
+						<div class="dl-progress-bar">
+							<div class="dl-progress-fill" style="width: {dlPct}%"></div>
+						</div>
+						<p class="dl-progress-sub">La sesión arrancará sola cuando esté todo listo</p>
+					</div>
+				{:else if dlTotal === 0}
+					<!-- No downloadable content — start manually (shouldn't usually happen) -->
+					{#if session.created_by === authVal.user?.id}
+						<button class="btn-primary big-btn start-btn" onclick={startSession}>
+							▶️ ¡Todos listos! Iniciar
+						</button>
+					{:else}
+						<p class="ready-msg">Esperando a que el anfitrión inicie…</p>
+					{/if}
+				{:else}
+					<!-- Downloads settled, auto-start triggered -->
+					<p class="ready-msg">🚀 Arrancando…</p>
 				{/if}
 			</div>
 		{/if}
@@ -1078,6 +1117,44 @@
 	}
 	.start-btn {
 		margin-top: 0.75rem;
+	}
+
+	.dl-progress-wrap {
+		margin-top: 1.25rem;
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+		align-items: center;
+		width: 100%;
+		max-width: 340px;
+	}
+	.dl-progress-label {
+		font-size: 0.9rem;
+		color: var(--text-muted);
+		margin: 0;
+	}
+	.dl-failed {
+		color: var(--accent);
+		font-size: 0.8rem;
+	}
+	.dl-progress-bar {
+		width: 100%;
+		height: 8px;
+		background: rgba(255,255,255,0.1);
+		border-radius: 4px;
+		overflow: hidden;
+	}
+	.dl-progress-fill {
+		height: 100%;
+		background: var(--accent);
+		border-radius: 4px;
+		transition: width 0.4s ease;
+	}
+	.dl-progress-sub {
+		font-size: 0.75rem;
+		color: var(--text-muted);
+		opacity: 0.7;
+		margin: 0;
 	}
 
 	/* Shared wrapper for sync-capable embeds */
