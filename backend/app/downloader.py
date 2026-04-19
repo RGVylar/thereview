@@ -27,8 +27,8 @@ _DOWNLOADABLE = re.compile(
     re.IGNORECASE,
 )
 
-# Max 4 concurrent yt-dlp downloads
-_DL_SEMAPHORE = threading.Semaphore(4)
+# Max 6 concurrent yt-dlp downloads (LXC has 2 GB RAM, plenty of headroom)
+_DL_SEMAPHORE = threading.Semaphore(6)
 
 
 def is_downloadable(url: str) -> bool:
@@ -99,9 +99,12 @@ def _run_ytdlp(out: Path, url: str) -> None:
             "format": "bestvideo[height<=480][ext=mp4]+bestaudio[ext=m4a]/best[height<=480][ext=mp4]/best[ext=mp4]/best",
             "merge_output_format": "mp4",
             "socket_timeout": 15,
-            # Abort if a single fragment stalls for >30 s
             "retries": 2,
             "fragment_retries": 2,
+            # Download each video in 4 parallel HTTP chunks — biggest speed win
+            "concurrent_fragment_downloads": 4,
+            # Skip writing .part temp files
+            "nopart": True,
         }
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             ydl.download([url])
