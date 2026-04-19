@@ -894,6 +894,7 @@
 						{/if}
 						{/key}
 
+						{#if true}
 						{@const totalMemes = session.session_memes.length}
 						{@const sliderVal = myVote?.value ?? null}
 						{@const rankPct = sliderVal !== null ? sliderVal / totalMemes : null}
@@ -955,6 +956,7 @@
 							</div>
 						</div>
 					</div>
+					{/if}
 
 					<!-- Navigation -->
 					<div class="nav-buttons">
