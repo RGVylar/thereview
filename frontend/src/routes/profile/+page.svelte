@@ -519,9 +519,9 @@
 					{:else if meme.embed.type === 'image'}
 						<img src={meme.url} alt="meme" class="meme-preview" />
 					{:else if meme.embed.type === 'tiktok' && meme.embed.embedUrl}
-						<iframe src={meme.embed.embedUrl} class="embed-frame tiktok-frame" allowfullscreen></iframe>
+						<iframe src={meme.embed.embedUrl} title="TikTok" class="embed-frame tiktok-frame" allowfullscreen={true}></iframe>
 					{:else if meme.embed.type === 'instagram' && meme.embed.embedUrl}
-						<iframe src={meme.embed.embedUrl} class="embed-frame instagram-frame" allowfullscreen></iframe>
+						<iframe src={meme.embed.embedUrl} title="Instagram" class="embed-frame instagram-frame" allowfullscreen={true}></iframe>
 					{:else if meme.embed.type === 'twitter'}
 						{#if twitterEmbeds[meme.id]}
 							<div class="twitter-embed-wrap" use:tweetWidget>{@html twitterEmbeds[meme.id]}</div>
