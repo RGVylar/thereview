@@ -4,7 +4,6 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { detectEmbed } from '$lib/embed.js';
-	import monkeySoundUrl from '../../../monkey.ogg?url';
 
 	let authVal;
 	auth.subscribe((v) => (authVal = v));
@@ -493,15 +492,32 @@
 		spawnEmoji(emoji, authVal?.user?.display_name ?? '');
 	}
 
-	let monkeyAudio = null;
 	function playMonkeySound() {
 		try {
-			if (!monkeyAudio) monkeyAudio = new Audio(monkeySoundUrl);
-			monkeyAudio.currentTime = 0;
-			monkeyAudio.play().catch(() => {});
-		} catch {
-			/* ignore */
-		}
+			const ctx = new AudioContext();
+			// 5 rapid "ooh-aah" sweeps using sawtooth oscillators
+			const sweeps = [
+				{ start: 0,    freqA: 420, freqB: 260, dur: 0.14 },
+				{ start: 0.15, freqA: 460, freqB: 280, dur: 0.14 },
+				{ start: 0.30, freqA: 500, freqB: 300, dur: 0.14 },
+				{ start: 0.45, freqA: 550, freqB: 320, dur: 0.16 },
+				{ start: 0.62, freqA: 600, freqB: 350, dur: 0.18 },
+			];
+			sweeps.forEach(({ start, freqA, freqB, dur }) => {
+				const osc = ctx.createOscillator();
+				const gain = ctx.createGain();
+				osc.connect(gain);
+				gain.connect(ctx.destination);
+				osc.type = 'sawtooth';
+				osc.frequency.setValueAtTime(freqA, ctx.currentTime + start);
+				osc.frequency.linearRampToValueAtTime(freqB, ctx.currentTime + start + dur);
+				gain.gain.setValueAtTime(0, ctx.currentTime + start);
+				gain.gain.linearRampToValueAtTime(0.18, ctx.currentTime + start + 0.02);
+				gain.gain.linearRampToValueAtTime(0, ctx.currentTime + start + dur);
+				osc.start(ctx.currentTime + start);
+				osc.stop(ctx.currentTime + start + dur + 0.01);
+			});
+		} catch { /* AudioContext not available */ }
 	}
 
 	function spawnEmoji(emoji, user) {
@@ -1067,18 +1083,20 @@
 						</div>
 					{/if}
 
-					<!-- Full list -->
+					<!-- Top 3 + Bottom 3 list -->
+					{@const top3 = ranking.slice(0, 3)}
+					{@const bottom3 = ranking.length > 3 ? ranking.slice(-3) : []}
+					{@const showDivider = ranking.length > 6}
 					<div class="ranking-list">
-						{#each ranking as entry, i (entry.meme_id)}
+						{#each top3 as entry, i (entry.meme_id)}
 							{@const embed = detectEmbed(entry.url)}
 							{@const avg = entry.vote_count ? entry.total_score / entry.vote_count : 0}
 							{@const pct = Math.round(avg / totalMemes * 100)}
 							{@const barPct = Math.round(entry.total_score / maxScore * 100)}
-							{@const myVoteHere = votes.find(v => v.meme_id === entry.meme_id && v.user_id === authVal.user?.id)}
 							{@const previewSrc = rankingPreviewSrc(entry)}
-							<div class="ranking-row" class:top3={i < 3}>
+							<div class="ranking-row top3">
 								<div class="ranking-pos">
-									{i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i+1}`}
+									{i === 0 ? '🥇' : i === 1 ? '🥈' : '🥉'}
 								</div>
 								<a href={entry.url} target="_blank" rel="noopener noreferrer" class="ranking-type-icon" title={entry.url}>
 									{#if previewSrc}
@@ -1107,6 +1125,52 @@
 								</div>
 							</div>
 						{/each}
+
+						{#if bottom3.length > 0}
+							{#if showDivider}
+								<div class="ranking-divider">
+									<span>· · · {ranking.length - 6} más · · ·</span>
+								</div>
+							{/if}
+							{#each bottom3 as entry, i (entry.meme_id)}
+								{@const realIndex = ranking.length - 3 + i}
+								{@const embed = detectEmbed(entry.url)}
+								{@const avg = entry.vote_count ? entry.total_score / entry.vote_count : 0}
+								{@const pct = Math.round(avg / totalMemes * 100)}
+								{@const barPct = Math.round(entry.total_score / maxScore * 100)}
+								{@const previewSrc = rankingPreviewSrc(entry)}
+								<div class="ranking-row ranking-row-bottom">
+									<div class="ranking-pos ranking-pos-bottom">
+										{realIndex === ranking.length - 1 ? '💀' : `#${realIndex + 1}`}
+									</div>
+									<a href={entry.url} target="_blank" rel="noopener noreferrer" class="ranking-type-icon" title={entry.url}>
+										{#if previewSrc}
+											<img src={previewSrc} alt="" class="ranking-thumb" loading="lazy" referrerpolicy="no-referrer" />
+										{:else}
+											{typeIcon(embed.type)}
+										{/if}
+									</a>
+									<div class="ranking-bar-wrap">
+										<div class="ranking-bar-meta">
+											<span class="ranking-submitter">por {entry.submitted_by}</span>
+											<span class="ranking-pct">{pct}%</span>
+										</div>
+										<div class="ranking-bar-track">
+											<div class="ranking-bar-fill ranking-bar-fill-bottom" style="width:{barPct}%"></div>
+										</div>
+										<div class="ranking-user-votes">
+											{#each session.participants as p}
+												{@const uv = votes.find(v => v.meme_id === entry.meme_id && v.user_id === p.id)}
+												<span class="uv-chip" class:uv-mine={p.id === authVal.user?.id} title="{p.display_name}: {uv ? uv.value + '/' + totalMemes : 'sin votar'}">
+													{p.display_name.slice(0,1).toUpperCase()}
+													{#if uv}<strong>{uv.value}</strong>{:else}—{/if}
+												</span>
+											{/each}
+										</div>
+									</div>
+								</div>
+							{/each}
+						{/if}
 					</div>
 				{/if}
 			</div>
@@ -1480,6 +1544,19 @@
 	}
 	.ranking-row:hover { background: rgba(255,255,255,0.06); }
 	.ranking-row.top3 { border-color: rgba(246,224,94,0.25); }
+	.ranking-row-bottom { border-color: rgba(229,62,62,0.18); }
+	.ranking-pos-bottom { color: var(--accent); }
+	.ranking-bar-fill-bottom {
+		background: linear-gradient(to right, #1a1a1a, #6b1a1a, #c53030);
+	}
+	.ranking-divider {
+		text-align: center;
+		color: var(--text-muted);
+		font-size: 0.75rem;
+		padding: 0.25rem 0;
+		opacity: 0.5;
+		letter-spacing: 0.05em;
+	}
 	.ranking-pos {
 		font-size: 1.1rem;
 		font-weight: 700;
