@@ -189,14 +189,13 @@
 			{#if addError}<div class="nav-add-error">{addError}</div>{/if}
 		</div>
 		<div class="nav-links">
-			<a href="/profile" class:active={isActive('/profile')}>👤 Perfil</a>
+			<a href="/profile" class:active={isActive('/profile')}>👤 {authVal.user?.display_name}</a>
 			<a href="/sessions" class:active={isActive('/sessions')} class="sessions-link">
 				🎬 Sesiones
 				{#if pendingInvites > 0}
 					<span class="invite-badge">{pendingInvites}</span>
 				{/if}
 			</a>
-			<span class="nav-user">👤 {authVal.user?.display_name}</span>
 			<button class="btn-ghost" onclick={logout}>Salir</button>
 			{#if extInstalled === true}
 				<span class="ext-status ext-connected" title="Extensión instalada">🔌 Extensión activa</span>
@@ -288,10 +287,6 @@
 		font-weight: 700;
 		background: var(--accent);
 		color: #fff;
-	}
-	.nav-user {
-		font-size: 0.85rem;
-		color: var(--text-muted);
 	}
 	.nav-add {
 		flex: 1;
