@@ -117,6 +117,10 @@
         requestPlay(video).catch(() => {});
       } else if (action === 'pause') {
         video.pause();
+      } else if (action === 'mute') {
+        video.muted = true;
+      } else if (action === 'unmute') {
+        video.muted = false;
       }
     } finally {
       setTimeout(() => { isSyncingCount = Math.max(0, isSyncingCount - 1); }, 300);
@@ -146,6 +150,14 @@
         }).catch(() => {});
       });
     }
+
+    video.addEventListener('volumechange', () => {
+      if (isSyncingCount > 0) return;
+      chrome.runtime.sendMessage({
+        type: 'TR_PLAYBACK_LOCAL',
+        payload: { action: video.muted ? 'mute' : 'unmute' },
+      }).catch(() => {});
+    });
   }
 
   /** Scan the DOM for any <video> we haven't attached to yet. */

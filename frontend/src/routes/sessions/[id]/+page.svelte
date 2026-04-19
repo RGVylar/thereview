@@ -47,6 +47,7 @@
 	// Reference to the currently mounted local <video> element (if any).
 	// Managed by the localVideoSync Svelte action.
 	let localVideoEl = null;
+	let localVideoMuted = $state(false);
 
 	/**
 	 * Svelte action for local <video> elements (served from our own backend).
@@ -84,13 +85,26 @@
 			}
 		}
 
-		const onPlay   = () => sendPlayback('play');
-		const onPause  = () => sendPlayback('pause');
-		const onSeeked = () => sendPlayback('seek');
+		function sendMuteState() {
+			if (suppressed) return;
+			localVideoMuted = node.muted;
+			if (ws?.readyState === WebSocket.OPEN) {
+				ws.send(JSON.stringify({ type: 'playback', action: node.muted ? 'mute' : 'unmute' }));
+			}
+		}
 
-		node.addEventListener('play',   onPlay);
-		node.addEventListener('pause',  onPause);
-		node.addEventListener('seeked', onSeeked);
+		const onPlay        = () => sendPlayback('play');
+		const onPause       = () => sendPlayback('pause');
+		const onSeeked      = () => sendPlayback('seek');
+		const onVolumeChange = () => sendMuteState();
+
+		node.addEventListener('play',         onPlay);
+		node.addEventListener('pause',        onPause);
+		node.addEventListener('seeked',       onSeeked);
+		node.addEventListener('volumechange', onVolumeChange);
+
+		// Track initial muted state (may be muted if autoplay required it)
+		localVideoMuted = node.muted;
 
 		// ── Remote → video ────────────────────────────────────────────────────
 		node._applyRemote = ({ action, currentTime }) => {
@@ -105,17 +119,25 @@
 				});
 			} else if (action === 'pause') {
 				node.pause();
+			} else if (action === 'mute') {
+				node.muted = true;
+				localVideoMuted = true;
+			} else if (action === 'unmute') {
+				node.muted = false;
+				localVideoMuted = false;
 			}
 			setTimeout(() => { suppressed = false; }, 300);
 		};
 
 		return {
 			destroy() {
-				node.removeEventListener('play',   onPlay);
-				node.removeEventListener('pause',  onPause);
-				node.removeEventListener('seeked', onSeeked);
+				node.removeEventListener('play',         onPlay);
+				node.removeEventListener('pause',        onPause);
+				node.removeEventListener('seeked',       onSeeked);
+				node.removeEventListener('volumechange', onVolumeChange);
 				delete node._applyRemote;
 				if (localVideoEl === node) localVideoEl = null;
+				localVideoMuted = false;
 			}
 		};
 	}
@@ -624,6 +646,11 @@
 									class="embed-frame tiktok-frame local-video"
 									use:localVideoSync
 								></video>
+								{#if localVideoMuted}
+									<button class="unmute-overlay" onclick={() => { if (localVideoEl) { localVideoEl.muted = false; } }}>
+										🔇 Haz clic para activar el sonido
+									</button>
+								{/if}
 							</div>
 						{:else if embed.type === 'tiktok' && embed.embedUrl}
 							<div class="sync-media-wrap">
@@ -653,6 +680,11 @@
 									class="embed-frame local-video"
 									use:localVideoSync
 								></video>
+								{#if localVideoMuted}
+									<button class="unmute-overlay" onclick={() => { if (localVideoEl) { localVideoEl.muted = false; } }}>
+										🔇 Haz clic para activar el sonido
+									</button>
+								{/if}
 							</div>
 						{:else if embed.type === 'twitter'}
 							<div class="sync-media-wrap">
@@ -1056,6 +1088,27 @@
 
 	.local-video {
 		background: #000;
+	}
+
+	.unmute-overlay {
+		position: absolute;
+		bottom: 48px; /* above video controls */
+		left: 50%;
+		transform: translateX(-50%);
+		background: rgba(0, 0, 0, 0.75);
+		color: #fff;
+		border: none;
+		border-radius: 20px;
+		padding: 8px 18px;
+		font-size: 0.85rem;
+		font-weight: 600;
+		cursor: pointer;
+		z-index: 10;
+		backdrop-filter: blur(4px);
+		transition: background 0.15s;
+	}
+	.unmute-overlay:hover {
+		background: rgba(229, 62, 62, 0.85);
 	}
 
 	.media-loading {
