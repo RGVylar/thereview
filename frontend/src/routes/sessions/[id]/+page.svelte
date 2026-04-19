@@ -894,20 +894,56 @@
 						{/if}
 						{/key}
 
+						{@const totalMemes = session.session_memes.length}
+						{@const sliderVal = myVote?.value ?? null}
+						{@const rankPct = sliderVal !== null ? sliderVal / totalMemes : null}
 						<div class="voting">
-							<div class="vote-buttons">
-								{#each [[1,'💀'],[2,'😐'],[3,'😄'],[4,'🔥'],[5,'💯']] as [val, emoji]}
-									<button
-										class="vote-btn"
-										class:active={myVote?.value === val}
-										onclick={() => castVote(sm.meme.id, val)}
-										title={val + '/5'}
-									>
-										{emoji}
-									</button>
-								{/each}
+							<div class="rank-slider-wrap">
+								<span class="rank-edge rank-bad">💀<br><small>Peor</small></span>
+								<div class="rank-slider-track">
+									<input
+										type="range"
+										min="0"
+										max={totalMemes}
+										value={sliderVal ?? Math.round(totalMemes / 2)}
+										class="rank-slider"
+										oninput={(e) => { /* visual update handled by binding */ }}
+										onchange={(e) => castVote(sm.meme.id, +e.target.value)}
+									/>
+									{#if sliderVal !== null}
+										<div class="rank-slider-fill" style="width: {rankPct * 100}%"></div>
+										<div class="rank-badge" style="left: calc({rankPct * 100}% - 16px)">
+											{sliderVal}
+										</div>
+									{/if}
+									<div class="rank-zone rank-zone-bad"  style="width:33%"></div>
+									<div class="rank-zone rank-zone-mid"  style="width:34%; left:33%"></div>
+									<div class="rank-zone rank-zone-good" style="width:33%; left:67%"></div>
+								</div>
+								<span class="rank-edge rank-good">🏆<br><small>Mejor</small></span>
 							</div>
-							<p class="vote-total">Puntuación: {getMemeVoteTotal(sm.meme.id)}</p>
+							{#if sliderVal === null}
+								<p class="rank-hint">← Desliza para colocar este meme en el ranking</p>
+							{:else}
+								<p class="rank-hint">
+									Puesto <strong>{sliderVal}</strong> de {totalMemes}
+									{#if rankPct < 0.33} · zona baja 💀
+									{:else if rankPct < 0.67} · zona media 😐
+									{:else} · zona alta 🔥
+									{/if}
+								</p>
+							{/if}
+							<!-- Other users' votes as dots on slider -->
+							{#if votes.filter(v => v.meme_id === sm.meme.id && v.user_id !== authVal.user?.id).length > 0}
+								<div class="other-votes">
+									{#each votes.filter(v => v.meme_id === sm.meme.id && v.user_id !== authVal.user?.id) as ov}
+										{@const participant = session.participants.find(p => p.id === ov.user_id)}
+										<span class="other-vote-dot" title="{participant?.display_name}: {ov.value}/{totalMemes}"
+											style="left: calc({(ov.value / totalMemes) * 100}% - 6px)">
+										</span>
+									{/each}
+								</div>
+							{/if}
 						</div>
 
 						<!-- Reaction buttons during review -->
@@ -1106,36 +1142,121 @@
 	.voting {
 		text-align: center;
 	}
-	.vote-label {
-		font-size: 0.85rem;
-		color: var(--text-muted);
-		margin-bottom: 0.5rem;
-	}
-	.vote-buttons {
+	/* ── Ranking slider ── */
+	.voting {
 		display: flex;
-		justify-content: center;
-		gap: 0.5rem;
+		flex-direction: column;
+		align-items: center;
+		gap: 0.4rem;
+		padding: 0.75rem 0;
+		width: 100%;
 	}
-	.vote-btn {
-		width: 48px;
-		height: 48px;
-		border-radius: 50%;
-		background: var(--bg-input);
-		color: var(--text);
-		font-size: 1.2rem;
-		font-weight: 700;
+	.rank-slider-wrap {
 		display: flex;
 		align-items: center;
-		justify-content: center;
+		gap: 0.75rem;
+		width: 100%;
+		max-width: 480px;
 	}
-	.vote-btn.active {
+	.rank-edge {
+		font-size: 1.3rem;
+		text-align: center;
+		line-height: 1.2;
+		flex-shrink: 0;
+	}
+	.rank-edge small { font-size: 0.6rem; color: var(--text-muted); }
+	.rank-bad  { opacity: 0.7; }
+	.rank-good { opacity: 0.9; }
+
+	.rank-slider-track {
+		position: relative;
+		flex: 1;
+		height: 36px;
+		display: flex;
+		align-items: center;
+	}
+	/* coloured background zones */
+	.rank-zone {
+		position: absolute;
+		height: 8px;
+		top: 50%;
+		transform: translateY(-50%);
+		border-radius: 4px;
+		pointer-events: none;
+	}
+	.rank-zone-bad  { background: rgba(229,62,62,0.25); border-radius: 4px 0 0 4px; }
+	.rank-zone-mid  { background: rgba(236,201,75,0.2); border-radius: 0; }
+	.rank-zone-good { background: rgba(72,187,120,0.25); border-radius: 0 4px 4px 0; }
+
+	.rank-slider {
+		position: relative;
+		z-index: 2;
+		width: 100%;
+		-webkit-appearance: none;
+		appearance: none;
+		height: 8px;
+		border-radius: 4px;
+		background: transparent;
+		outline: none;
+		cursor: pointer;
+	}
+	.rank-slider::-webkit-slider-thumb {
+		-webkit-appearance: none;
+		appearance: none;
+		width: 22px;
+		height: 22px;
+		border-radius: 50%;
+		background: var(--accent);
+		border: 2px solid #fff;
+		box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+		cursor: grab;
+		transition: transform 0.1s;
+	}
+	.rank-slider:active::-webkit-slider-thumb { transform: scale(1.2); cursor: grabbing; }
+	.rank-slider::-moz-range-thumb {
+		width: 22px; height: 22px;
+		border-radius: 50%;
+		background: var(--accent);
+		border: 2px solid #fff;
+		cursor: grab;
+	}
+
+	.rank-badge {
+		position: absolute;
+		top: -24px;
 		background: var(--accent);
 		color: #fff;
+		font-size: 0.75rem;
+		font-weight: 700;
+		padding: 1px 6px;
+		border-radius: 6px;
+		pointer-events: none;
+		z-index: 3;
+		white-space: nowrap;
 	}
-	.vote-total {
-		margin-top: 0.5rem;
-		font-size: 0.85rem;
+
+	.rank-hint {
+		font-size: 0.82rem;
 		color: var(--text-muted);
+		margin: 0;
+	}
+	.rank-hint strong { color: var(--text); }
+
+	.other-votes {
+		position: relative;
+		width: 100%;
+		max-width: 480px;
+		height: 12px;
+		margin-top: 2px;
+	}
+	.other-vote-dot {
+		position: absolute;
+		width: 10px;
+		height: 10px;
+		border-radius: 50%;
+		background: rgba(144, 205, 244, 0.7);
+		border: 1px solid rgba(144,205,244,0.9);
+		top: 1px;
 	}
 
 	/* Nav */
