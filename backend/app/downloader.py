@@ -102,6 +102,11 @@ def download_and_update(session_id: int, meme_id: int, url: str) -> None:
             db.commit()
             return
 
+        # Register as active immediately — shows in stats during URL extraction
+        # and semaphore wait, not just during data transfer.
+        with _progress_lock:
+            _download_progress[(session_id, meme_id)] = {"downloaded": 0, "total": 0, "speed": 0.0}
+
         _run_ytdlp(out, url, session_id, meme_id)
 
         # Re-fetch — session may have been deleted while downloading

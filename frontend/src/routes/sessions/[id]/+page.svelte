@@ -685,12 +685,14 @@
 								<span class="dl-stat">{formatBytes(dlLiveProgress.downloaded_bytes)} / {formatBytes(dlLiveProgress.total_bytes)}</span>
 							{:else if dlLiveProgress?.downloaded_bytes > 0}
 								<span class="dl-stat">{formatBytes(dlLiveProgress.downloaded_bytes)}</span>
+							{:else if dlLiveProgress?.active_count > 0}
+								<span class="dl-stat">extrayendo…</span>
 							{/if}
 							{#if dlLiveProgress?.speed_bps > 0}
 								<span class="dl-stat dl-speed">↓ {formatSpeed(dlLiveProgress.speed_bps)}</span>
 							{/if}
 							{#if dlLiveProgress?.active_count > 0}
-								<span class="dl-stat">{dlLiveProgress.active_count} activos</span>
+								<span class="dl-stat">{dlLiveProgress.active_count} en curso</span>
 							{/if}
 						</div>
 						{#if dlFailed > 0}
