@@ -65,9 +65,21 @@ def create_session(
     if len(users) != len(user_ids):
         raise HTTPException(status_code=400, detail="One or more user IDs are invalid")
 
+    # Meme IDs already locked in an active/pending session
+    from sqlalchemy import select
+    locked_meme_ids = db.scalars(
+        select(SessionMeme.meme_id)
+        .join(Session, Session.id == SessionMeme.session_id)
+        .where(Session.status.in_([SessionStatus.PENDING, SessionStatus.ACTIVE]))
+    ).all()
+
     memes = (
         db.query(Meme)
-        .filter(Meme.user_id.in_(user_ids), Meme.reviewed_at.is_(None))
+        .filter(
+            Meme.user_id.in_(user_ids),
+            Meme.reviewed_at.is_(None),
+            Meme.id.notin_(locked_meme_ids) if locked_meme_ids else True,
+        )
         .all()
     )
     if not memes:
@@ -242,9 +254,17 @@ def finish_session(
     ]
     if viewed_meme_ids:
         now = datetime.now(timezone.utc)
-        db.query(Meme).filter(Meme.id.in_(viewed_meme_ids)).update(
-            {"reviewed_at": now}, synchronize_session="fetch"
-        )
+        # Get the URLs of viewed memes so we can also mark duplicate submissions
+        # (same URL saved by different participants) that were deduplicated at creation.
+        viewed_urls = [
+            str(m.url)
+            for m in db.query(Meme.url).filter(Meme.id.in_(viewed_meme_ids)).all()
+        ]
+        participant_ids = [p.user_id for p in session.participants]
+        db.query(Meme).filter(
+            Meme.url.in_(viewed_urls),
+            Meme.user_id.in_(participant_ids),
+        ).update({"reviewed_at": now}, synchronize_session="fetch")
 
     session.status = SessionStatus.FINISHED
     db.commit()
