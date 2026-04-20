@@ -903,6 +903,20 @@
 		return value; // fallback (all taken — shouldn't happen)
 	}
 
+	// ── Vote density heatmap ─────────────────────────────────────────────────
+	/**
+	 * Classic jet-style color: 0=dark→blue→cyan→yellow→red=1
+	 * Used for the global vote-density heatmap in results.
+	 */
+	function heatColor(t) {
+		if (t <= 0) return 'rgba(255,255,255,0.04)';
+		// hue: 240 (blue) at t=0 → 0 (red) at t=1
+		const h = Math.round((1 - t) * 240);
+		const s = 85;
+		const l = t < 0.12 ? Math.round(20 + t / 0.12 * 25) : 50;
+		return `hsl(${h},${s}%,${l}%)`;
+	}
+
 	// ── F5 recovery ───────────────────────────────────────────────────────────
 	function savePosition(sessionId, index) {
 		try { localStorage.setItem(`tr_pos_${sessionId}`, String(index)); } catch {}
@@ -1483,6 +1497,34 @@
 				{#if !ranking.length}
 					<p class="empty">No hay votos todavía</p>
 				{:else}
+					<!-- ── Global vote density heatmap ── -->
+					{@const _buckets = (() => {
+						const arr = new Array(totalMemes + 1).fill(0);
+						votes.forEach(v => { if (v.value >= 0 && v.value <= totalMemes) arr[v.value]++; });
+						return arr;
+					})()}
+					{@const _maxBucket = Math.max(..._buckets, 1)}
+					<div class="global-heatmap-wrap">
+						<div class="global-heatmap-labels">
+							<span>💀</span>
+							<span class="heatmap-title">Mapa de calor · todos los votos</span>
+							<span>🏆</span>
+						</div>
+						<div class="global-heatmap">
+							{#each _buckets as count, i}
+								<div
+									class="heatmap-cell"
+									style="background:{heatColor(count / _maxBucket)}"
+									title="Score {i}: {count} voto{count !== 1 ? 's' : ''}"
+								>
+									{#if count >= 2}
+										<span class="heatmap-cell-count">{count}</span>
+									{/if}
+								</div>
+							{/each}
+						</div>
+					</div>
+
 					<!-- Podium top 3 -->
 					{#if ranking.length >= 3}
 						<div class="podium">
@@ -1570,19 +1612,6 @@
 												</span>
 											{/each}
 										</div>
-										<!-- Vote heatmap: dots showing where each player voted -->
-										<div class="vote-heatmap">
-											{#each session.participants as p, pi}
-												{@const uv = votes.find(v => v.meme_id === entry.meme_id && v.user_id === p.id)}
-												{#if uv}
-													<span
-														class="heat-dot"
-														style="left:{(uv.value / totalMemes) * 100}%;background:{CURSOR_COLORS[pi % CURSOR_COLORS.length]}"
-														title="{p.display_name}: {uv.value}"
-													></span>
-												{/if}
-											{/each}
-										</div>
 									</div>
 								</div>
 							{/each}
@@ -1628,19 +1657,6 @@
 													{p.display_name.slice(0,1).toUpperCase()}
 													{#if uv}<strong>{uv.value}</strong>{:else}—{/if}
 												</span>
-											{/each}
-										</div>
-										<!-- Vote heatmap -->
-										<div class="vote-heatmap">
-											{#each session.participants as p, pi}
-												{@const uv = votes.find(v => v.meme_id === entry.meme_id && v.user_id === p.id)}
-												{#if uv}
-													<span
-														class="heat-dot"
-														style="left:{(uv.value / totalMemes) * 100}%;background:{CURSOR_COLORS[pi % CURSOR_COLORS.length]}"
-														title="{p.display_name}: {uv.value}"
-													></span>
-												{/if}
 											{/each}
 										</div>
 									</div>
@@ -2849,26 +2865,52 @@
 	}
 	.kofi-link-panel:hover { color: var(--text); }
 
-	/* ── Vote heatmap (ranking rows) ── */
-	.vote-heatmap {
-		position: relative;
-		height: 12px;
-		background: rgba(255,255,255,0.04);
-		border-radius: 4px;
-		overflow: visible;
-		margin-top: 3px;
+	/* ── Global vote density heatmap ── */
+	.global-heatmap-wrap {
+		display: flex;
+		flex-direction: column;
+		gap: 0.3rem;
+		padding: 0.75rem 0.5rem;
+		background: rgba(255,255,255,0.02);
+		border: 1px solid rgba(255,255,255,0.06);
+		border-radius: 12px;
 	}
-	.heat-dot {
-		position: absolute;
-		top: 50%;
-		transform: translate(-50%, -50%);
-		width: 10px;
-		height: 10px;
-		border-radius: 50%;
-		border: 1.5px solid rgba(0,0,0,0.4);
-		box-shadow: 0 1px 3px rgba(0,0,0,0.4);
-		pointer-events: auto;
-		cursor: default;
+	.global-heatmap-labels {
+		display: flex;
+		justify-content: space-between;
+		font-size: 0.72rem;
+		color: var(--text-muted);
+	}
+	.heatmap-title {
+		font-weight: 600;
+		letter-spacing: 0.03em;
+	}
+	.global-heatmap {
+		display: flex;
+		height: 44px;
+		border-radius: 6px;
+		overflow: hidden;
+		gap: 1px;
+		background: rgba(0,0,0,0.3);
+	}
+	.heatmap-cell {
+		flex: 1;
+		position: relative;
+		display: flex;
+		align-items: flex-end;
+		justify-content: center;
+		transition: opacity 0.2s;
+		min-width: 0;
+	}
+	.heatmap-cell:hover { opacity: 0.8; cursor: default; }
+	.heatmap-cell-count {
+		font-size: 0.55rem;
+		font-weight: 700;
+		color: rgba(255,255,255,0.9);
+		padding-bottom: 2px;
+		line-height: 1;
+		pointer-events: none;
+		text-shadow: 0 1px 2px rgba(0,0,0,0.8);
 	}
 
 	/* ── Emoji reaction summary (ranking view) ── */
