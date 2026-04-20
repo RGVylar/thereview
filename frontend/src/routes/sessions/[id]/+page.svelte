@@ -324,6 +324,7 @@
 				} else if (msg.type === 'fun_tap') {
 					playEmojiSound(msg.emoji);
 					emojiCounts = { ...emojiCounts, [msg.emoji]: (emojiCounts[msg.emoji] || 0) + 1 };
+					if (session?.id) _saveEmojiCounts(session.id, emojiCounts);
 					spawnEmoji(msg.emoji, msg.user);
 				} else if (msg.type === 'show_ranking') {
 					ranking = await api(`/api/sessions/${session.id}/votes/ranking?top=5&bottom=5`, { token: authVal.token });
@@ -479,6 +480,8 @@
 			const id = pageVal.params.id;
 			session = await api(`/api/sessions/${id}`, { token: authVal.token });
 			votes = await api(`/api/sessions/${id}/votes`, { token: authVal.token });
+			// Restore emoji reaction counts from localStorage (persisted across reloads)
+			_loadEmojiCounts(session.id);
 			if (session.status === 'finished') {
 				ranking = await api(`/api/sessions/${id}/votes/ranking?top=5&bottom=5`, { token: authVal.token });
 				view = 'ranking';
@@ -556,6 +559,16 @@
 	let floatingEmojis = $state([]); // [{id, emoji, x, user}]
 	let _emojiId = 0;
 	let emojiCounts = $state({}); // {emoji: count} — accumulated during session
+
+	function _saveEmojiCounts(sessionId, counts) {
+		try { localStorage.setItem(`tr_emojis_${sessionId}`, JSON.stringify(counts)); } catch {}
+	}
+	function _loadEmojiCounts(sessionId) {
+		try {
+			const raw = localStorage.getItem(`tr_emojis_${sessionId}`);
+			if (raw) emojiCounts = JSON.parse(raw);
+		} catch {}
+	}
 
 	function sendFunTap(emoji) {
 		playEmojiSound(emoji);
@@ -909,11 +922,13 @@
 	 * Used for the global vote-density heatmap in results.
 	 */
 	function heatColor(t) {
-		if (t <= 0) return 'rgba(255,255,255,0.04)';
-		// hue: 240 (blue) at t=0 → 0 (red) at t=1
-		const h = Math.round((1 - t) * 240);
-		const s = 85;
-		const l = t < 0.12 ? Math.round(20 + t / 0.12 * 25) : 50;
+		if (t <= 0) return 'rgba(255,255,255,0.06)';
+		// jet-style: blue(240°) → cyan(180°) → yellow(60°) → red(0°)
+		// t=0.01..1 maps to hue 220..0
+		const h = Math.round((1 - t) * 220);
+		// saturation high throughout; lightness ramps up with intensity
+		const s = 88;
+		const l = Math.round(28 + t * 32); // 28% at t=0.01 → 60% at t=1
 		return `hsl(${h},${s}%,${l}%)`;
 	}
 
@@ -1504,23 +1519,20 @@
 						return arr;
 					})()}
 					{@const _maxBucket = Math.max(..._buckets, 1)}
+					{@const _totalVotes = _buckets.reduce((s, c) => s + c, 0)}
 					<div class="global-heatmap-wrap">
 						<div class="global-heatmap-labels">
-							<span>💀</span>
-							<span class="heatmap-title">Mapa de calor · todos los votos</span>
-							<span>🏆</span>
+							<span>💀 Peor</span>
+							<span class="heatmap-title">🌡️ {_totalVotes} votos · dónde cayeron</span>
+							<span>🏆 Mejor</span>
 						</div>
 						<div class="global-heatmap">
 							{#each _buckets as count, i}
 								<div
 									class="heatmap-cell"
-									style="background:{heatColor(count / _maxBucket)}"
-									title="Score {i}: {count} voto{count !== 1 ? 's' : ''}"
-								>
-									{#if count >= 2}
-										<span class="heatmap-cell-count">{count}</span>
-									{/if}
-								</div>
+									style="background:{heatColor(count / _maxBucket)};align-self:{count > 0 ? 'flex-end' : 'stretch'};height:{count > 0 ? Math.max(25, Math.round((count / _maxBucket) * 100)) : 15}%"
+									title="Puntuación {i}: {count} voto{count !== 1 ? 's' : ''}"
+								></div>
 							{/each}
 						</div>
 					</div>
@@ -2887,31 +2899,23 @@
 	}
 	.global-heatmap {
 		display: flex;
-		height: 44px;
+		align-items: flex-end;
+		height: 52px;
 		border-radius: 6px;
 		overflow: hidden;
 		gap: 1px;
-		background: rgba(0,0,0,0.3);
+		background: rgba(255,255,255,0.03);
+		border: 1px solid rgba(255,255,255,0.06);
+		padding: 0 1px 1px;
 	}
 	.heatmap-cell {
 		flex: 1;
-		position: relative;
-		display: flex;
-		align-items: flex-end;
-		justify-content: center;
-		transition: opacity 0.2s;
+		border-radius: 2px 2px 0 0;
 		min-width: 0;
+		transition: opacity 0.15s;
+		cursor: default;
 	}
-	.heatmap-cell:hover { opacity: 0.8; cursor: default; }
-	.heatmap-cell-count {
-		font-size: 0.55rem;
-		font-weight: 700;
-		color: rgba(255,255,255,0.9);
-		padding-bottom: 2px;
-		line-height: 1;
-		pointer-events: none;
-		text-shadow: 0 1px 2px rgba(0,0,0,0.8);
-	}
+	.heatmap-cell:hover { opacity: 0.75; }
 
 	/* ── Emoji reaction summary (ranking view) ── */
 	.emoji-summary {
