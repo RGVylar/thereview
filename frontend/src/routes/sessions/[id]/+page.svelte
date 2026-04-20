@@ -322,7 +322,8 @@
 						readyUserIds = [...readyUserIds, msg.user_id];
 					}
 				} else if (msg.type === 'fun_tap') {
-					if (msg.emoji === '🐒') playMonkeySound();
+					playEmojiSound(msg.emoji);
+					emojiCounts = { ...emojiCounts, [msg.emoji]: (emojiCounts[msg.emoji] || 0) + 1 };
 					spawnEmoji(msg.emoji, msg.user);
 				} else if (msg.type === 'show_ranking') {
 					ranking = await api(`/api/sessions/${session.id}/votes/ranking?top=5&bottom=5`, { token: authVal.token });
@@ -554,41 +555,33 @@
 	const FUN_BUTTONS = ['🔔','🎉','💩','👋','🍿','💀','🐒'];
 	let floatingEmojis = $state([]); // [{id, emoji, x, user}]
 	let _emojiId = 0;
+	let emojiCounts = $state({}); // {emoji: count} — accumulated during session
 
 	function sendFunTap(emoji) {
-		if (emoji === '🐒') playMonkeySound();
+		playEmojiSound(emoji);
 		if (ws?.readyState === WebSocket.OPEN) {
 			ws.send(JSON.stringify({ type: 'fun_tap', emoji }));
 		}
 		spawnEmoji(emoji, authVal?.user?.display_name ?? '');
 	}
 
+	// Sound files keyed by emoji — add more as needed
+	const EMOJI_SOUNDS = { '🐒': '/monkey.ogg' };
+
 	function playMonkeySound() {
 		try {
-			const ctx = new AudioContext();
-			// 5 rapid "ooh-aah" sweeps using sawtooth oscillators
-			const sweeps = [
-				{ start: 0,    freqA: 420, freqB: 260, dur: 0.14 },
-				{ start: 0.15, freqA: 460, freqB: 280, dur: 0.14 },
-				{ start: 0.30, freqA: 500, freqB: 300, dur: 0.14 },
-				{ start: 0.45, freqA: 550, freqB: 320, dur: 0.16 },
-				{ start: 0.62, freqA: 600, freqB: 350, dur: 0.18 },
-			];
-			sweeps.forEach(({ start, freqA, freqB, dur }) => {
-				const osc = ctx.createOscillator();
-				const gain = ctx.createGain();
-				osc.connect(gain);
-				gain.connect(ctx.destination);
-				osc.type = 'sawtooth';
-				osc.frequency.setValueAtTime(freqA, ctx.currentTime + start);
-				osc.frequency.linearRampToValueAtTime(freqB, ctx.currentTime + start + dur);
-				gain.gain.setValueAtTime(0, ctx.currentTime + start);
-				gain.gain.linearRampToValueAtTime(0.18, ctx.currentTime + start + 0.02);
-				gain.gain.linearRampToValueAtTime(0, ctx.currentTime + start + dur);
-				osc.start(ctx.currentTime + start);
-				osc.stop(ctx.currentTime + start + dur + 0.01);
-			});
-		} catch { /* AudioContext not available */ }
+			const audio = new Audio('/monkey.ogg');
+			audio.play().catch(() => {});
+		} catch { /* not available */ }
+	}
+
+	function playEmojiSound(emoji) {
+		const src = EMOJI_SOUNDS[emoji];
+		if (!src) return;
+		try {
+			const audio = new Audio(src);
+			audio.play().catch(() => {});
+		} catch {}
 	}
 
 	function spawnEmoji(emoji, user) {
@@ -1152,7 +1145,7 @@
 			{#if sm}
 				{@const embed = detectEmbed(sm.meme.url)}
 				{@const myVote = getMyVote(sm.meme.id)}
-				<div class="presentation-wrap" class:notepad-open={noteVisible}>
+				<div class="presentation-wrap">
 				<div class="presentation">
 					<div class="progress-bar">
 						<span>{currentIndex + 1} / {session.session_memes.length}</span>
@@ -1165,30 +1158,37 @@
 					</div>
 
 				<div class="meme-and-nav">
-					<button
-						class="nav-side nav-side-prev"
-						onclick={prev}
-						disabled={currentIndex === 0}
-						title="Anterior"
-					>‹</button>
+					<!-- Left panel: prev nav + reaction buttons -->
+					<div class="left-panel">
+						<button
+							class="nav-side nav-side-prev"
+							onclick={prev}
+							disabled={currentIndex === 0}
+							title="Anterior"
+						>‹</button>
+						<div class="fun-side-buttons">
+							{#each FUN_BUTTONS as emoji}
+								<button class="fun-btn fun-btn-side" onclick={() => sendFunTap(emoji)} title={emoji}>{emoji}</button>
+							{/each}
+						</div>
+					</div>
 
 					<div class="card meme-display">
-						<div class="meme-source">
+						<!-- Single-line: type · author · meta chips -->
+						<div class="meme-source-row">
 							<span class="meme-type">{embed.type}
 								{#if sm.extra_count > 0}<span class="dup-badge">×{sm.extra_count + 1}</span>{/if}
 							</span>
 							<span class="meme-author">by {session.participants.find(p => p.id === sm.meme.user_id)?.display_name || '?'}</span>
-						</div>
-						{#if mediaStatus[String(sm.meme.id)]?.meta}
-							{@const meta = mediaStatus[String(sm.meme.id)].meta}
-							<div class="meme-meta-row">
+							{#if mediaStatus[String(sm.meme.id)]?.meta}
+								{@const meta = mediaStatus[String(sm.meme.id)].meta}
 								{#if meta.uploader}<span class="meta-chip meta-uploader">👤 {meta.uploader}</span>{/if}
 								{#if meta.view_count}<span class="meta-chip">👁 {meta.view_count >= 1_000_000 ? (meta.view_count/1_000_000).toFixed(1)+'M' : meta.view_count >= 1_000 ? (meta.view_count/1_000).toFixed(0)+'K' : meta.view_count}</span>{/if}
 								{#if meta.like_count}<span class="meta-chip">❤️ {meta.like_count >= 1_000_000 ? (meta.like_count/1_000_000).toFixed(1)+'M' : meta.like_count >= 1_000 ? (meta.like_count/1_000).toFixed(0)+'K' : meta.like_count}</span>{/if}
 								{#if meta.comment_count}<span class="meta-chip">💬 {meta.comment_count >= 1_000 ? (meta.comment_count/1_000).toFixed(0)+'K' : meta.comment_count}</span>{/if}
 								{#if meta.duration}<span class="meta-chip">⏱ {meta.duration >= 60 ? Math.floor(meta.duration/60)+'m' + (meta.duration%60 > 0 ? (meta.duration%60)+'s' : '') : meta.duration+'s'}</span>{/if}
-							</div>
-						{/if}
+							{/if}
+						</div>
 
 						{#key sm.meme.id}
 						{#if embed.type === 'youtube' && embed.embedUrl}
@@ -1305,14 +1305,14 @@
 											castVote(sm.meme.id, resolved);
 										}}
 									/>
-									<!-- Other users' votes as dots -->
+									<!-- Other users' votes as dots with initial -->
 									{#each votes.filter(v => v.meme_id === sm.meme.id && v.user_id !== authVal.user?.id) as ov}
 										{@const participant = session.participants.find(p => p.id === ov.user_id)}
 										<span
 											class="other-vote-dot"
 											title="{participant?.display_name}: {ov.value}/{totalMemes}"
 											style="left: {(ov.value / totalMemes) * 100}%"
-										></span>
+										><span class="other-vote-initial">{participant?.display_name?.slice(0,1) ?? '?'}</span></span>
 									{/each}
 									<!-- Taken score ticks (used in other memes by this user) -->
 									{#each [...usedOther] as taken}
@@ -1343,61 +1343,59 @@
 							<div class="superfav-flash">⭐ ¡SUPER FAVORITO!</div>
 						{/if}
 
-						<!-- Reaction buttons during review -->
-						<div class="fun-buttons-wrap fun-buttons-review">
-							<div class="fun-buttons">
-								{#each FUN_BUTTONS as emoji}
-									<button class="fun-btn fun-btn-sm" onclick={() => sendFunTap(emoji)}>{emoji}</button>
-								{/each}
-							</div>
-						</div>
 					{/if}
 					</div><!-- /card meme-display -->
 
-					<!-- Right nav: next or ver ranking -->
-					<div class="nav-side-wrap">
-						{#if currentIndex === session.session_memes.length - 1}
-							<button class="nav-side nav-side-rank" onclick={showRanking} title="Ver ranking">📊</button>
-						{:else}
-							<button
-								class="nav-side"
-								class:nav-ready={nextVoters.includes(authVal.user?.id)}
-								onclick={voteNext}
-								title="Siguiente"
-							>›</button>
-							{#if nextVoters.length > 0 || session.participants.length > 1}
+					<!-- Right panel: next nav + vote indicators + notepad + kofi -->
+					<div class="right-panel">
+						<div class="nav-side-wrap">
+							{#if currentIndex === session.session_memes.length - 1}
+								<button class="nav-side nav-side-rank" onclick={showRanking} title="Ver ranking">📊</button>
+							{:else}
+								<button
+									class="nav-side"
+									class:nav-ready={nextVoters.includes(authVal.user?.id)}
+									onclick={voteNext}
+									title="Siguiente"
+								>›</button>
 								<div class="next-vote-dots">
 									{#each session.participants as p}
-										<span
-											class="next-vote-dot"
-											class:voted={nextVoters.includes(p.id)}
-											title={p.display_name}
-										></span>
+										<div class="next-vote-item" class:voted={nextVoters.includes(p.id)}>
+											<span class="next-vote-dot" class:voted={nextVoters.includes(p.id)}></span>
+											<span class="next-vote-name">{p.display_name.slice(0, 8)}</span>
+										</div>
 									{/each}
 								</div>
 							{/if}
-						{/if}
+						</div>
+
 					</div>
+
+					<!-- Notepad: appears as extra column to the right of nav -->
+					{#if noteVisible}
+						<div class="notepad-panel">
+							<div class="notepad-header">
+								<span>📝 Notas</span>
+								<button class="notepad-close" onclick={() => (noteVisible = false)}>✕</button>
+							</div>
+							<textarea
+								class="notepad-textarea"
+								bind:value={noteText}
+								oninput={(e) => sendNote(e.target.value)}
+								placeholder="Notas compartidas…"
+							></textarea>
+							<a
+								href="https://ko-fi.com/Z8Z81OW7UV"
+								target="_blank"
+								rel="noopener noreferrer"
+								class="kofi-link-panel"
+								title="Invítame un café ☕"
+							>☕</a>
+						</div>
+					{/if}
 				</div><!-- /meme-and-nav -->
 
 				</div><!-- /presentation -->
-
-				<!-- Notepad sidebar -->
-				{#if noteVisible}
-					<div class="notepad-sidebar">
-						<div class="notepad-header">
-							<span>📝 Notas</span>
-							<button class="notepad-close" onclick={() => (noteVisible = false)}>✕</button>
-						</div>
-						<textarea
-							class="notepad-textarea"
-							bind:value={noteText}
-							oninput={(e) => sendNote(e.target.value)}
-							placeholder="Notas compartidas — todo el mundo ve los cambios en tiempo real…"
-						></textarea>
-					</div>
-				{/if}
-
 				</div><!-- /presentation-wrap -->
 			{/if}
 		{/if}
@@ -1471,6 +1469,16 @@
 						</div>
 					{/if}
 				</div>
+
+				<!-- Emoji reaction summary -->
+				{#if Object.keys(emojiCounts).length > 0}
+					<div class="emoji-summary">
+						<span class="emoji-summary-label">Reacciones:</span>
+						{#each Object.entries(emojiCounts).sort((a, b) => b[1] - a[1]).slice(0, 6) as [emoji, count]}
+							<span class="emoji-summary-item">{emoji}<strong>{count}</strong></span>
+						{/each}
+					</div>
+				{/if}
 
 				{#if !ranking.length}
 					<p class="empty">No hay votos todavía</p>
@@ -1562,6 +1570,19 @@
 												</span>
 											{/each}
 										</div>
+										<!-- Vote heatmap: dots showing where each player voted -->
+										<div class="vote-heatmap">
+											{#each session.participants as p, pi}
+												{@const uv = votes.find(v => v.meme_id === entry.meme_id && v.user_id === p.id)}
+												{#if uv}
+													<span
+														class="heat-dot"
+														style="left:{(uv.value / totalMemes) * 100}%;background:{CURSOR_COLORS[pi % CURSOR_COLORS.length]}"
+														title="{p.display_name}: {uv.value}"
+													></span>
+												{/if}
+											{/each}
+										</div>
 									</div>
 								</div>
 							{/each}
@@ -1607,6 +1628,19 @@
 													{p.display_name.slice(0,1).toUpperCase()}
 													{#if uv}<strong>{uv.value}</strong>{:else}—{/if}
 												</span>
+											{/each}
+										</div>
+										<!-- Vote heatmap -->
+										<div class="vote-heatmap">
+											{#each session.participants as p, pi}
+												{@const uv = votes.find(v => v.meme_id === entry.meme_id && v.user_id === p.id)}
+												{#if uv}
+													<span
+														class="heat-dot"
+														style="left:{(uv.value / totalMemes) * 100}%;background:{CURSOR_COLORS[pi % CURSOR_COLORS.length]}"
+														title="{p.display_name}: {uv.value}"
+													></span>
+												{/if}
 											{/each}
 										</div>
 									</div>
@@ -1718,6 +1752,16 @@
 		display: flex;
 		justify-content: space-between;
 		font-size: 0.8rem;
+	}
+	/* Single-line unified source row (type + author + meta chips) */
+	.meme-source-row {
+		width: 100%;
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.3rem 0.5rem;
+		font-size: 0.78rem;
+		padding-bottom: 0.1rem;
 	}
 	.meme-type {
 		text-transform: uppercase;
@@ -1878,19 +1922,31 @@
 		cursor: grab;
 	}
 
-	/* Dots: other users' votes, positioned below track */
+	/* Dots: other users' votes, positioned above track */
 	.other-vote-dot {
 		position: absolute;
-		bottom: 2px;
-		width: 10px;
-		height: 10px;
+		top: -2px;
+		width: 18px;
+		height: 18px;
 		border-radius: 50%;
-		background: #90cdf4;
-		border: 2px solid #63b3ed;
+		background: #4299e1;
+		border: 2px solid #fff;
 		transform: translateX(-50%);
+		pointer-events: auto;
+		z-index: 10;
+		box-shadow: 0 0 0 2px #4299e1, 0 2px 6px rgba(0,0,0,0.5);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		cursor: default;
+	}
+	.other-vote-initial {
+		font-size: 0.55rem;
+		font-weight: 800;
+		color: #fff;
+		line-height: 1;
 		pointer-events: none;
-		z-index: 2;
-		box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+		user-select: none;
 	}
 
 	.rank-hint {
@@ -2308,9 +2364,56 @@
 	.meme-and-nav {
 		display: flex;
 		gap: 0.5rem;
-		align-items: stretch;
+		align-items: flex-start;
 	}
 	.meme-and-nav > .card { flex: 1; min-width: 0; }
+
+	/* Left panel: prev button + fun emoji sidebar */
+	.left-panel {
+		width: 44px;
+		flex-shrink: 0;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 6px;
+	}
+	.left-panel > .nav-side { width: 100%; height: 52px; flex: none; }
+	.fun-side-buttons {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 3px;
+		padding: 2px 0;
+	}
+	.fun-btn-side {
+		font-size: 1.2rem;
+		padding: 0.2rem;
+		border-radius: 8px;
+		width: 38px;
+		height: 38px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		background: rgba(255,255,255,0.05);
+		border: 1px solid rgba(255,255,255,0.08);
+		cursor: pointer;
+		transition: transform 0.1s, background 0.1s;
+		line-height: 1;
+	}
+	.fun-btn-side:hover  { background: rgba(255,255,255,0.12); }
+	.fun-btn-side:active { transform: scale(0.85); }
+
+	/* Right panel: next nav + notepad (inline, same row as video) */
+	.right-panel {
+		flex-shrink: 0;
+		width: 80px;
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+		position: sticky;
+		top: 1rem;
+		align-self: flex-start;
+	}
 	.nav-side {
 		width: 44px;
 		flex-shrink: 0;
@@ -2334,31 +2437,53 @@
 		border-color: rgba(104,211,145,0.35);
 	}
 	.nav-side-wrap {
-		width: 44px;
-		flex-shrink: 0;
+		width: 100%;
 		display: flex;
 		flex-direction: column;
-		align-items: center;
+		align-items: stretch;
 		gap: 6px;
 	}
-	.nav-side-wrap > .nav-side { flex: 1; width: 100%; }
+	.nav-side-wrap > .nav-side { flex: none; height: 52px; width: 100%; }
 	.next-vote-dots {
 		display: flex;
 		flex-direction: column;
-		gap: 4px;
+		gap: 5px;
+		align-items: flex-start;
+		padding: 4px 0;
+		width: 100%;
+	}
+	.next-vote-item {
+		display: flex;
 		align-items: center;
-		padding: 2px 0;
+		gap: 4px;
 	}
 	.next-vote-dot {
-		width: 8px;
-		height: 8px;
+		width: 10px;
+		height: 10px;
 		border-radius: 50%;
 		background: rgba(255,255,255,0.15);
-		border: 2px solid rgba(255,255,255,0.1);
+		border: 2px solid rgba(255,255,255,0.2);
 		transition: all 0.2s;
 		flex-shrink: 0;
 	}
-	.next-vote-dot.voted { background: #68d391; border-color: #38a169; }
+	.next-vote-dot.voted {
+		background: #68d391;
+		border-color: #38a169;
+		box-shadow: 0 0 8px rgba(104,211,145,0.7);
+	}
+	.next-vote-name {
+		font-size: 0.65rem;
+		color: var(--text-muted);
+		font-weight: 500;
+		white-space: nowrap;
+		overflow: hidden;
+		max-width: 60px;
+		text-overflow: ellipsis;
+	}
+	.next-vote-item.voted .next-vote-name {
+		color: #68d391;
+		font-weight: 700;
+	}
 
 	/* ── Presentation + notepad wrapper ── */
 	.presentation-wrap {
@@ -2691,6 +2816,89 @@
 	.playoff-voter-chip.voted {
 		background: rgba(104,211,145,0.15);
 		color: #68d391;
+	}
+
+	/* ── Inline notepad panel (flex sibling of right-panel in meme-and-nav) ── */
+	.notepad-panel {
+		width: 210px;
+		flex-shrink: 0;
+		background: rgba(255,255,255,0.04);
+		border: 1px solid rgba(255,255,255,0.1);
+		border-radius: 12px;
+		display: flex;
+		flex-direction: column;
+		overflow: hidden;
+		max-height: calc(100vh - 160px);
+		align-self: flex-start;
+		position: sticky;
+		top: 1rem;
+	}
+	.notepad-panel .notepad-textarea {
+		min-height: 200px;
+		flex: 1;
+	}
+	.kofi-link-panel {
+		display: block;
+		text-align: center;
+		font-size: 0.78rem;
+		color: var(--text-muted);
+		text-decoration: none;
+		padding: 0.35rem 0.5rem;
+		border-top: 1px solid rgba(255,255,255,0.06);
+		transition: color 0.2s;
+	}
+	.kofi-link-panel:hover { color: var(--text); }
+
+	/* ── Vote heatmap (ranking rows) ── */
+	.vote-heatmap {
+		position: relative;
+		height: 12px;
+		background: rgba(255,255,255,0.04);
+		border-radius: 4px;
+		overflow: visible;
+		margin-top: 3px;
+	}
+	.heat-dot {
+		position: absolute;
+		top: 50%;
+		transform: translate(-50%, -50%);
+		width: 10px;
+		height: 10px;
+		border-radius: 50%;
+		border: 1.5px solid rgba(0,0,0,0.4);
+		box-shadow: 0 1px 3px rgba(0,0,0,0.4);
+		pointer-events: auto;
+		cursor: default;
+	}
+
+	/* ── Emoji reaction summary (ranking view) ── */
+	.emoji-summary {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		flex-wrap: wrap;
+		padding: 0.4rem 0.75rem;
+		background: rgba(255,255,255,0.03);
+		border: 1px solid rgba(255,255,255,0.07);
+		border-radius: 10px;
+		font-size: 0.82rem;
+	}
+	.emoji-summary-label {
+		color: var(--text-muted);
+		font-size: 0.75rem;
+		font-weight: 600;
+	}
+	.emoji-summary-item {
+		display: flex;
+		align-items: center;
+		gap: 3px;
+		background: rgba(255,255,255,0.06);
+		border-radius: 8px;
+		padding: 2px 7px;
+	}
+	.emoji-summary-item strong {
+		font-size: 0.75rem;
+		color: var(--text);
 	}
 
 	.media-loading {
