@@ -49,12 +49,13 @@
 	let dlElapsedTimer = null;
 
 	// mediaStatus values are now {status, meta?} objects
-	let dlTotal   = $derived(Object.keys(mediaStatus).filter(k => k !== '_progress').length);
-	let dlReady   = $derived(Object.values(mediaStatus).filter(s => s?.status === 'ready').length);
-	let dlFailed  = $derived(Object.values(mediaStatus).filter(s => s?.status === 'failed').length);
-	let dlPending = $derived(Object.values(mediaStatus).filter(s => s?.status === 'pending').length);
-	let dlSettled = $derived(dlTotal > 0 && dlPending === 0);
-	let dlPct     = $derived(dlTotal > 0 ? Math.round(((dlReady + dlFailed) / dlTotal) * 100) : 0);
+	let dlTotal     = $derived(Object.keys(mediaStatus).filter(k => k !== '_progress').length);
+	let dlReady     = $derived(Object.values(mediaStatus).filter(s => s?.status === 'ready').length);
+	let dlFailed    = $derived(Object.values(mediaStatus).filter(s => s?.status === 'failed').length);
+	let dlSlideshow = $derived(Object.values(mediaStatus).filter(s => s?.status === 'slideshow').length);
+	let dlPending   = $derived(Object.values(mediaStatus).filter(s => s?.status === 'pending').length);
+	let dlSettled   = $derived(dlTotal > 0 && dlPending === 0);
+	let dlPct       = $derived(dlTotal > 0 ? Math.round(((dlReady + dlFailed + dlSlideshow) / dlTotal) * 100) : 0);
 
 	// Estimated time remaining based on current speed and remaining bytes
 	let dlEta = $derived(() => {
@@ -1247,6 +1248,8 @@
 							<div class="sync-media-wrap">
 								{#if mediaStatus[String(sm.meme.id)]?.status === 'pending'}
 									<div class="media-loading">⏬ Cargando vídeo local…</div>
+								{:else if mediaStatus[String(sm.meme.id)]?.status === 'slideshow'}
+									<div class="media-loading slideshow-badge">🖼️ Slideshow de imágenes</div>
 								{/if}
 								<iframe
 									src={embed.embedUrl}
@@ -2953,6 +2956,10 @@
 		text-align: center;
 		padding: 0.3rem 0;
 		animation: fadeIn 0.3s;
+	}
+	.slideshow-badge {
+		color: #90cdf4;
+		font-weight: 600;
 	}
 	.out-of-sync-hint {
 		font-size: 0.82rem;
