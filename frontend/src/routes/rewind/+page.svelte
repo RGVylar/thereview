@@ -108,6 +108,22 @@
       day: 'numeric'
     });
   }
+
+  function getPlatformColor(url) {
+    if (url.includes('tiktok')) return 'linear-gradient(135deg, #000 0%, #25f4ee 100%)';
+    if (url.includes('twitter') || url.includes('x.com')) return 'linear-gradient(135deg, #1da1f2 0%, #1a91da 100%)';
+    if (url.includes('instagram')) return 'linear-gradient(135deg, #feda75 0%, #fa7e1e 100%)';
+    if (url.includes('youtube')) return 'linear-gradient(135deg, #ff0000 0%, #cc0000 100%)';
+    return 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
+  }
+
+  function getPlatformEmoji(url) {
+    if (url.includes('tiktok')) return '🎵';
+    if (url.includes('twitter') || url.includes('x.com')) return '𝕏';
+    if (url.includes('instagram')) return '📷';
+    if (url.includes('youtube')) return '▶️';
+    return '🎬';
+  }
 </script>
 
 <svelte:head>
@@ -203,9 +219,12 @@
               {#each yearData.memes.slice(0, 3) as meme, idx}
                 <a href={meme.url} target="_blank" rel="noopener noreferrer" class="meme-item top">
                   <div class="rank">#{idx + 1}</div>
+                  <div class="thumbnail" style="background: {getPlatformColor(meme.url)};">
+                    <span class="platform-emoji">{getPlatformEmoji(meme.url)}</span>
+                  </div>
                   <div class="meme-content">
                     <div class="score">{meme.avg_vote}⭐</div>
-                    <div class="meta">{meme.vote_count} votes · {formatDate(meme.reviewed_at)}</div>
+                    <div class="meta">{formatDate(meme.reviewed_at)}</div>
                   </div>
                 </a>
               {/each}
@@ -221,9 +240,12 @@
               {#each [...yearData.memes].reverse().slice(0, 3) as meme, idx}
                 <a href={meme.url} target="_blank" rel="noopener noreferrer" class="meme-item bottom">
                   <div class="rank">#{idx + 1}</div>
+                  <div class="thumbnail" style="background: {getPlatformColor(meme.url)};">
+                    <span class="platform-emoji">{getPlatformEmoji(meme.url)}</span>
+                  </div>
                   <div class="meme-content">
                     <div class="score">{meme.avg_vote}⭐</div>
-                    <div class="meta">{meme.vote_count} votes · {formatDate(meme.reviewed_at)}</div>
+                    <div class="meta">{formatDate(meme.reviewed_at)}</div>
                   </div>
                 </a>
               {/each}
@@ -405,14 +427,14 @@
   }
 
   .rank {
-    min-width: 50px;
-    height: 50px;
+    min-width: 40px;
+    height: 40px;
     display: flex;
     align-items: center;
     justify-content: center;
     border-radius: 8px;
     font-weight: 700;
-    font-size: 1.1rem;
+    font-size: 0.95rem;
     flex-shrink: 0;
   }
 
@@ -424,6 +446,21 @@
   .meme-item.bottom .rank {
     background: rgba(255, 107, 107, 0.2);
     color: #ff9999;
+  }
+
+  .thumbnail {
+    width: 60px;
+    height: 60px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    font-size: 1.8rem;
+  }
+
+  .platform-emoji {
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
   }
 
   .meme-content {
