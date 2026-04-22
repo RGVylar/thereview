@@ -174,7 +174,7 @@ def get_rewind_stats(
     if not session_ids:
         return {"years": {}}
 
-    # Get all reviewed memes from those sessions
+    # Get all reviewed memes from those sessions (deduplicated by meme id)
     reviewed_memes = (
         db.query(Meme)
         .join(SessionMeme)
@@ -182,22 +182,41 @@ def get_rewind_stats(
         .order_by(Meme.reviewed_at.desc())
         .all()
     )
+    # Deduplicate: a meme can appear in multiple sessions
+    seen_ids = set()
+    unique_memes = []
+    for m in reviewed_memes:
+        if m.id not in seen_ids:
+            seen_ids.add(m.id)
+            unique_memes.append(m)
+    reviewed_memes = unique_memes
 
     if not reviewed_memes:
         return {"years": {}}
 
+    meme_ids = [m.id for m in reviewed_memes]
+
+    # Bulk-load ALL votes for all memes in one query — avoids N+1
+    all_vote_rows = (
+        db.query(Vote.meme_id, Vote.value)
+        .filter(Vote.meme_id.in_(meme_ids))
+        .all()
+    )
+    votes_by_meme: dict[int, list[int]] = {}
+    for meme_id, value in all_vote_rows:
+        votes_by_meme.setdefault(meme_id, []).append(value)
+
     # Get super favorites for quick lookup
     super_fav_ids = {
-        row[0] for row in db.query(SuperFavorite.meme_id).all()
+        row[0] for row in db.query(SuperFavorite.meme_id)
+        .filter(SuperFavorite.meme_id.in_(meme_ids)).all()
     }
 
     # Group by year
     by_year: dict[int, list] = {}
     for meme in reviewed_memes:
         year = meme.reviewed_at.year
-        if year not in by_year:
-            by_year[year] = []
-        by_year[year].append(meme)
+        by_year.setdefault(year, []).append(meme)
 
     # For each year, compute stats
     result = {}
@@ -211,15 +230,9 @@ def get_rewind_stats(
             "super_favorites": [],
         }
 
-        # Get vote stats for each meme
         for meme in memes_in_year:
-            votes_for_meme = (
-                db.query(Vote.value)
-                .filter(Vote.meme_id == meme.id)
-                .all()
-            )
-            if votes_for_meme:
-                vote_values = [v[0] for v in votes_for_meme]
+            vote_values = votes_by_meme.get(meme.id, [])
+            if vote_values:
                 avg_vote = sum(vote_values) / len(vote_values)
                 max_vote = max(vote_values)
                 min_vote = min(vote_values)
@@ -236,51 +249,47 @@ def get_rewind_stats(
                 "avg_vote": round(avg_vote, 2),
                 "max_vote": max_vote,
                 "min_vote": min_vote,
-                "vote_count": len(votes_for_meme),
+                "vote_count": len(vote_values),
                 "is_super_favorite": meme.id in super_fav_ids,
             }
             year_data["memes"].append(meme_data)
 
-            # Track super favorites separately
             if meme.id in super_fav_ids:
                 year_data["super_favorites"].append(meme_data)
 
-        # Calculate percentile for each meme (normalized by year average)
-        if year_data["memes"]:
-            avg_scores = [m["avg_vote"] for m in year_data["memes"]]
-            year_avg = sum(avg_scores) / len(avg_scores) if avg_scores else 0
-
-            for meme in year_data["memes"]:
-                # Percentile: position in sorted list
-                sorted_scores = sorted([m["avg_vote"] for m in year_data["memes"]], reverse=True)
-                position = sorted_scores.index(meme["avg_vote"]) + 1
-                meme["percentile"] = (100 * (len(sorted_scores) - position + 1)) / len(sorted_scores)
-                # Deviation from year average
-                meme["deviation_from_avg"] = round(meme["avg_vote"] - year_avg, 2)
-
-        # Sort by average vote descending
+        # Sort by avg_vote descending
         year_data["memes"].sort(key=lambda m: m["avg_vote"], reverse=True)
 
-        # Pick best and worst
-        if year_data["memes"]:
-            year_data["best_meme"] = year_data["memes"][0]
-            year_data["worst_meme"] = year_data["memes"][-1]
-        else:
-            year_data["best_meme"] = None
-            year_data["worst_meme"] = None
+        # Calculate percentile — rank by position, handle ties correctly
+        n = len(year_data["memes"])
+        if n:
+            avg_scores = [m["avg_vote"] for m in year_data["memes"]]
+            year_avg = sum(avg_scores) / n
+
+            # Assign rank (1 = best). Ties share the same rank (dense ranking).
+            ranked_scores = sorted(set(avg_scores), reverse=True)
+            rank_map = {score: i + 1 for i, score in enumerate(ranked_scores)}
+
+            for meme in year_data["memes"]:
+                rank = rank_map[meme["avg_vote"]]
+                meme["percentile"] = round(100 * (n - rank + 1) / n, 1)
+                meme["deviation_from_avg"] = round(meme["avg_vote"] - year_avg, 2)
+
+        # Best/worst only among memes that have been voted
+        voted = [m for m in year_data["memes"] if m["vote_count"] > 0]
+        year_data["best_meme"] = voted[0] if voted else None
+        year_data["worst_meme"] = voted[-1] if voted else None
 
         result[str(year)] = year_data
 
-    # Global statistics
-    all_votes = []
-    platform_counts = {}
+    # Global statistics — reuse votes_by_meme, no extra queries
+    all_avg_votes = []
+    platform_counts: dict[str, int] = {}
     for meme in reviewed_memes:
-        votes = db.query(Vote).filter(Vote.meme_id == meme.id).all()
-        if votes:
-            vote_values = [v.value for v in votes]
-            all_votes.append(sum(vote_values) / len(vote_values))
+        vote_values = votes_by_meme.get(meme.id, [])
+        if vote_values:
+            all_avg_votes.append(sum(vote_values) / len(vote_values))
 
-        platform = "otro"
         if "tiktok" in meme.url:
             platform = "tiktok"
         elif "twitter" in meme.url or "x.com" in meme.url:
@@ -289,12 +298,13 @@ def get_rewind_stats(
             platform = "instagram"
         elif "youtube" in meme.url:
             platform = "youtube"
-
+        else:
+            platform = "otro"
         platform_counts[platform] = platform_counts.get(platform, 0) + 1
 
     global_stats = {
         "total_memes": len(reviewed_memes),
-        "avg_score": round(sum(all_votes) / len(all_votes), 2) if all_votes else 0,
+        "avg_score": round(sum(all_avg_votes) / len(all_avg_votes), 2) if all_avg_votes else 0,
         "platform_breakdown": platform_counts,
     }
 
