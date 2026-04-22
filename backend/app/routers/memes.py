@@ -3,13 +3,15 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import func
 from sqlalchemy.orm import Session as DBSession
 
 from app.auth import get_current_user
 from app.database import get_db
-from app.models import Meme, User
+from app.models import Meme, User, Vote, SuperFavorite
 from app.schemas import DeadCheckRequest, DeadCheckResponse, MemeBatchCreate, MemeBatchResult, MemeCreate, MemeList, MemeOut
 
 router = APIRouter(prefix="/api/memes", tags=["memes"])
@@ -154,4 +156,95 @@ def delete_meme(
         raise HTTPException(status_code=403, detail="Not your meme")
     db.delete(meme)
     db.commit()
+
+
+@router.get("/rewind/review-stats")
+def get_rewind_stats(
+    db: DBSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Get year-by-year review statistics for rewind view."""
+    # Get all reviewed memes for current user grouped by year
+    reviewed_memes = (
+        db.query(Meme)
+        .filter(Meme.user_id == current_user.id, Meme.reviewed_at.isnot(None))
+        .order_by(Meme.reviewed_at.desc())
+        .all()
+    )
+
+    if not reviewed_memes:
+        return {"years": {}}
+
+    # Get super favorites for quick lookup
+    super_fav_ids = {
+        row[0] for row in db.query(SuperFavorite.meme_id).all()
+    }
+
+    # Group by year
+    by_year: dict[int, list] = {}
+    for meme in reviewed_memes:
+        year = meme.reviewed_at.year
+        if year not in by_year:
+            by_year[year] = []
+        by_year[year].append(meme)
+
+    # For each year, compute stats
+    result = {}
+    for year in sorted(by_year.keys(), reverse=True):
+        memes_in_year = by_year[year]
+        year_data = {
+            "count": len(memes_in_year),
+            "first_reviewed": min(m.reviewed_at for m in memes_in_year).isoformat(),
+            "last_reviewed": max(m.reviewed_at for m in memes_in_year).isoformat(),
+            "memes": [],
+            "super_favorites": [],
+        }
+
+        # Get vote stats for each meme
+        for meme in memes_in_year:
+            votes_for_meme = (
+                db.query(Vote.value)
+                .filter(Vote.meme_id == meme.id)
+                .all()
+            )
+            if votes_for_meme:
+                vote_values = [v[0] for v in votes_for_meme]
+                avg_vote = sum(vote_values) / len(vote_values)
+                max_vote = max(vote_values)
+                min_vote = min(vote_values)
+            else:
+                avg_vote = 0
+                max_vote = 0
+                min_vote = 0
+
+            meme_data = {
+                "id": meme.id,
+                "url": meme.url,
+                "reviewed_at": meme.reviewed_at.isoformat(),
+                "avg_vote": round(avg_vote, 2),
+                "max_vote": max_vote,
+                "min_vote": min_vote,
+                "vote_count": len(votes_for_meme),
+                "is_super_favorite": meme.id in super_fav_ids,
+            }
+            year_data["memes"].append(meme_data)
+
+            # Track super favorites separately
+            if meme.id in super_fav_ids:
+                year_data["super_favorites"].append(meme_data)
+
+        # Sort by average vote descending
+        year_data["memes"].sort(key=lambda m: m["avg_vote"], reverse=True)
+
+        # Pick best and worst
+        if year_data["memes"]:
+            year_data["best_meme"] = year_data["memes"][0]
+            year_data["worst_meme"] = year_data["memes"][-1]
+        else:
+            year_data["best_meme"] = None
+            year_data["worst_meme"] = None
+
+        result[str(year)] = year_data
+
+    return {"years": result}
 

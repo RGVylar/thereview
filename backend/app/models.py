@@ -21,6 +21,7 @@ class MediaStatus(str, enum.Enum):
     PENDING = "pending"
     READY = "ready"
     FAILED = "failed"
+    SLIDESHOW = "slideshow"
 
 
 class User(Base):

@@ -173,6 +173,7 @@ def _is_slideshow(ie: dict) -> bool:
     """Return True if the extracted info represents an image slideshow, not a video."""
     if not ie:
         return False
+
     # Playlist of images → slideshow
     if ie.get("_type") == "playlist":
         entries = ie.get("entries") or []
@@ -181,19 +182,31 @@ def _is_slideshow(ie: dict) -> bool:
             for e in entries
             if e
         ):
+            print(f"[DL] Detected slideshow via _type=playlist")
             return True
+
     # Single info entry with images list but no playable video formats
     if ie.get("images") and not ie.get("formats"):
+        print(f"[DL] Detected slideshow via images field without formats")
         return True
+
     # yt-dlp marks these as "photos" or "images" in some extractors
     if ie.get("webpage_url_basename") == "photo":
+        print(f"[DL] Detected slideshow via webpage_url_basename=photo")
         return True
+
+    # TikTok carousel: has entries but all are images (no video format)
+    entries = ie.get("entries") or []
+    if entries and all(not e.get("formats") for e in entries if e):
+        print(f"[DL] Detected slideshow via entries without video formats")
+        return True
+
     return False
 
 
 def _run_ytdlp(out: Path, url: str, session_id: int, meme_id: int) -> dict:
     """Run yt-dlp via its Python API.  Returns extracted metadata dict (may be empty).
-    Raises _SlideshowError if the URL is a TikTok image/slideshow post.
+    Raises _SlideshowError if detected as TikTok image post.
     """
     print(f"[DL] _run_ytdlp starting: {url}")
     try:
@@ -204,30 +217,6 @@ def _run_ytdlp(out: Path, url: str, session_id: int, meme_id: int) -> dict:
     meta: dict = {}
     with _DL_SEMAPHORE:
         print(f"[DL] Entered semaphore for {meme_id}, starting YoutubeDL...")
-
-        # First pass: extract info WITHOUT downloading so we can detect slideshows
-        probe_opts = {
-            "quiet": True,
-            "no_warnings": True,
-            "noplaylist": False,  # need playlist to detect slideshow entries
-            "socket_timeout": 15,
-            "skip_download": True,
-        }
-        try:
-            with yt_dlp.YoutubeDL(probe_opts) as ydl:
-                ie_probe = ydl.extract_info(url, download=False)
-                if _is_slideshow(ie_probe):
-                    print(f"[DL] Detected slideshow for {meme_id}, skipping video download")
-                    # Extract what metadata we can from the probe
-                    if ie_probe:
-                        meta = {k: ie_probe[k] for k in _META_FIELDS if ie_probe.get(k) is not None}
-                    raise _SlideshowError()
-        except _SlideshowError:
-            raise
-        except Exception as e:
-            # Probe failed — attempt the download anyway; let it surface a real error
-            print(f"[DL] Probe failed for {meme_id} ({e}), proceeding with download")
-
         ydl_opts = {
             "outtmpl": str(out),
             "quiet": True,
@@ -247,15 +236,23 @@ def _run_ytdlp(out: Path, url: str, session_id: int, meme_id: int) -> dict:
                 print(f"[DL] Calling extract_info for {url}")
                 ie = ydl.extract_info(url, download=True)
                 print(f"[DL] extract_info done, got result: {ie is not None}")
-                # Post-download slideshow check (some extractors only reveal type after download)
-                if _is_slideshow(ie):
-                    print(f"[DL] Post-download slideshow detected for {meme_id}")
-                    raise _SlideshowError()
                 if ie:
+                    # Check for slideshow (image post with no video)
+                    if _is_slideshow(ie):
+                        print(f"[DL] Detected slideshow for {meme_id}, marking as slideshow")
+                        raise _SlideshowError()
                     meta = {k: ie[k] for k in _META_FIELDS if ie.get(k) is not None}
+                    print(f"[DL] Extracted metadata for {meme_id}: {list(meta.keys())}")
+                else:
+                    print(f"[DL] extract_info returned None for {meme_id}")
         except _SlideshowError:
             raise
         except Exception as e:
+            error_str = str(e).lower()
+            # Detect TikTok image post errors by exception message
+            if "image" in error_str or "slideshow" in error_str or "photo" in error_str:
+                print(f"[DL] Detected slideshow error for {meme_id}: {e}")
+                raise _SlideshowError()
             print(f"[DL] ERROR in YoutubeDL: {e}")
             raise
         print(f"[DL] _run_ytdlp completed for {meme_id}, meta keys: {list(meta.keys())}")

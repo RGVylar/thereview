@@ -196,6 +196,7 @@
 					<span class="invite-badge">{pendingInvites}</span>
 				{/if}
 			</a>
+			<a href="/rewind" class:active={isActive('/rewind')}>🎬 Rewind</a>
 			<button class="btn-ghost" onclick={logout}>Salir</button>
 			{#if extInstalled === true}
 				<span class="ext-status ext-connected" title="Extensión instalada">🔌 Extensión activa</span>
