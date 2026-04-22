@@ -13,6 +13,7 @@ from app.auth import get_current_user
 from app.database import get_db
 from app.models import Meme, User, Vote, SuperFavorite, Session, SessionMeme, SessionUser
 from app.schemas import DeadCheckRequest, DeadCheckResponse, MemeBatchCreate, MemeBatchResult, MemeCreate, MemeList, MemeOut
+from app.thumbnails import batch_embed_thumbnails
 
 router = APIRouter(prefix="/api/memes", tags=["memes"])
 
@@ -212,13 +213,16 @@ def get_rewind_stats(
         .filter(SuperFavorite.meme_id.in_(meme_ids)).all()
     }
 
+    # Meme lookup by id
+    meme_by_id = {m.id: m for m in reviewed_memes}
+
     # Group by year
     by_year: dict[int, list] = {}
     for meme in reviewed_memes:
         year = meme.reviewed_at.year
         by_year.setdefault(year, []).append(meme)
 
-    # For each year, compute stats
+    # ── PASS 1: compute stats + rankings, no thumbnails yet ──
     result = {}
     for year in sorted(by_year.keys(), reverse=True):
         memes_in_year = by_year[year]
@@ -232,55 +236,68 @@ def get_rewind_stats(
 
         for meme in memes_in_year:
             vote_values = votes_by_meme.get(meme.id, [])
-            if vote_values:
-                avg_vote = sum(vote_values) / len(vote_values)
-                max_vote = max(vote_values)
-                min_vote = min(vote_values)
-            else:
-                avg_vote = 0
-                max_vote = 0
-                min_vote = 0
+            avg_vote = sum(vote_values) / len(vote_values) if vote_values else 0
 
             meme_data = {
                 "id": meme.id,
                 "url": meme.url,
-                "thumbnail_url": meme.thumbnail_url,
+                "thumbnail_url": meme.thumbnail_url,  # filled in pass 2
                 "reviewed_at": meme.reviewed_at.isoformat(),
                 "avg_vote": round(avg_vote, 2),
-                "max_vote": max_vote,
-                "min_vote": min_vote,
+                "max_vote": max(vote_values) if vote_values else 0,
+                "min_vote": min(vote_values) if vote_values else 0,
                 "vote_count": len(vote_values),
                 "is_super_favorite": meme.id in super_fav_ids,
             }
             year_data["memes"].append(meme_data)
-
             if meme.id in super_fav_ids:
                 year_data["super_favorites"].append(meme_data)
 
-        # Sort by avg_vote descending
+        # Sort + percentile
         year_data["memes"].sort(key=lambda m: m["avg_vote"], reverse=True)
-
-        # Calculate percentile — rank by position, handle ties correctly
         n = len(year_data["memes"])
         if n:
             avg_scores = [m["avg_vote"] for m in year_data["memes"]]
             year_avg = sum(avg_scores) / n
-
-            # Assign rank (1 = best). Ties share the same rank (dense ranking).
             ranked_scores = sorted(set(avg_scores), reverse=True)
             rank_map = {score: i + 1 for i, score in enumerate(ranked_scores)}
-
             for meme in year_data["memes"]:
                 rank = rank_map[meme["avg_vote"]]
                 meme["percentile"] = round(100 * (n - rank + 1) / n, 1)
                 meme["deviation_from_avg"] = round(meme["avg_vote"] - year_avg, 2)
 
-        # Best/worst only among memes that have been voted
         voted = [m for m in year_data["memes"] if m["vote_count"] > 0]
         year_data["best_meme"] = voted[0] if voted else None
         year_data["worst_meme"] = voted[-1] if voted else None
 
         result[str(year)] = year_data
+
+    # ── PASS 2: resolve thumbnails only for displayed memes ──
+    # Collect: top 3 + bottom 3 + up to 6 super favs per year
+    display_urls: set[str] = set()
+    for year_data in result.values():
+        voted = [m for m in year_data["memes"] if m["vote_count"] > 0]
+        for m in voted[:3] + voted[-3:]:
+            display_urls.add(m["url"])
+        for m in year_data["super_favorites"][:6]:
+            display_urls.add(m["url"])
+
+    # Only fetch thumbnails for memes without one already stored
+    urls_needing_thumb = [u for u in display_urls if not next(
+        (m.thumbnail_url for m in reviewed_memes if m.url == u and m.thumbnail_url), None
+    )]
+    live_thumbs = batch_embed_thumbnails(urls_needing_thumb) if urls_needing_thumb else {}
+
+    # Build final thumbnail map and patch into meme dicts
+    thumb_map: dict[str, str | None] = {}
+    for meme in reviewed_memes:
+        if meme.url in display_urls:
+            thumb_map[meme.url] = meme.thumbnail_url or live_thumbs.get(meme.url)
+
+    for year_data in result.values():
+        for meme in year_data["memes"]:
+            if meme["url"] in thumb_map:
+                meme["thumbnail_url"] = thumb_map[meme["url"]]
 
     # Global statistics — reuse votes_by_meme, no extra queries
     all_avg_votes = []
