@@ -124,9 +124,16 @@ def download_and_update(session_id: int, meme_id: int, url: str) -> None:
                 import json
                 cache.dl_metadata = json.dumps(meta, ensure_ascii=True)
         else:
-            cache.status = "failed"
-            cache.error = "yt-dlp produced no output file"
-            print(f"[DL] yt-dlp no output [session={session_id} meme={meme_id}]")
+            # No file produced - might be a slideshow or failed download
+            # If extraction succeeded but produced no file, likely a slideshow
+            if meta or (ie and _is_slideshow(ie)):
+                cache.status = "slideshow"
+                cache.error = None
+                print(f"[DL] Detected slideshow (no output file) [session={session_id} meme={meme_id}]")
+            else:
+                cache.status = "failed"
+                cache.error = "yt-dlp produced no output file"
+                print(f"[DL] yt-dlp no output [session={session_id} meme={meme_id}]")
         db.commit()
 
     except _SlideshowError:
@@ -199,6 +206,12 @@ def _is_slideshow(ie: dict) -> bool:
     entries = ie.get("entries") or []
     if entries and all(not e.get("formats") for e in entries if e):
         print(f"[DL] Detected slideshow via entries without video formats")
+        return True
+
+    # Check if there are no formats at all (typical for image-only posts)
+    formats = ie.get("formats") or []
+    if not formats and ie.get("ext") not in ("mp4", "webm", "mkv", "avi"):
+        print(f"[DL] Detected slideshow via no formats and non-video ext: {ie.get('ext')}")
         return True
 
     return False
