@@ -51,6 +51,7 @@ class Meme(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+    thumbnail_url: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)
 
     user: Mapped["User"] = relationship(back_populates="memes")
     session_memes: Mapped[list["SessionMeme"]] = relationship(back_populates="meme", cascade="all, delete-orphan")

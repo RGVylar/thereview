@@ -134,6 +134,13 @@ def download_and_update(session_id: int, meme_id: int, url: str) -> None:
                 cache.status = "failed"
                 cache.error = "yt-dlp produced no output file"
                 print(f"[DL] yt-dlp no output [session={session_id} meme={meme_id}]")
+
+        # Update meme thumbnail if we extracted one
+        if meta and meta.get("thumbnail"):
+            meme = db.query(Meme).filter_by(id=meme_id).first()
+            if meme and not meme.thumbnail_url:
+                meme.thumbnail_url = meta["thumbnail"]
+
         db.commit()
 
     except _SlideshowError:
@@ -168,7 +175,7 @@ def download_and_update(session_id: int, meme_id: int, url: str) -> None:
 _META_FIELDS = (
     "uploader", "uploader_id", "uploader_url",
     "like_count", "comment_count", "view_count",
-    "duration", "title", "description",
+    "duration", "title", "description", "thumbnail",
 )
 
 

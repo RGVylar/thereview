@@ -6,8 +6,14 @@
   let error = null;
   let authVal = $state(null);
   let isLoading = $state(true);
+  let failedThumbnails = $state(new Set());
 
   auth.subscribe((v) => (authVal = v));
+
+  function handleImageError(memeId) {
+    failedThumbnails.add(memeId);
+    failedThumbnails = failedThumbnails;
+  }
 
   async function loadRewindData() {
     if (!authVal?.token) {
@@ -23,7 +29,7 @@
       isLoading = false;
     } catch (err) {
       error = err.message;
-      rewindData = { years: {} };
+      rewindData = { years: {}, global_stats: {} };
       isLoading = false;
     }
   }
@@ -36,6 +42,20 @@
 
   const MONTHS = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
   const DAYS = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
+  const PLATFORM_EMOJI = {
+    tiktok: '🎵',
+    twitter: '𝕏',
+    instagram: '📷',
+    youtube: '▶️',
+    otro: '🎬'
+  };
+  const PLATFORM_NAME = {
+    tiktok: 'TikTok',
+    twitter: 'Twitter/X',
+    instagram: 'Instagram',
+    youtube: 'YouTube',
+    otro: 'Otros'
+  };
 
   function buildCalendarGrid(year, memes) {
     if (!memes || memes.length === 0) return { weeks: [], monthLabels: [] };
@@ -49,7 +69,6 @@
       maxCount = Math.max(maxCount, dateMap[date]);
     });
 
-    // Build weeks starting from Jan 1
     const jan1 = new Date(year, 0, 1);
     const dec31 = new Date(year, 11, 31);
 
@@ -75,7 +94,6 @@
       weeks.push(week);
     }
 
-    // Get month labels
     const monthLabels = [];
     const seen = new Set();
     weeks.forEach((week, col) => {
@@ -148,6 +166,28 @@
   </div>
 {:else}
   <div class="rewind-wrapper">
+    <!-- Global Stats -->
+    {#if rewindData.global_stats}
+      <div class="global-hero">
+        <div class="hero-kicker">TU ACTIVIDAD EN 2026</div>
+        <div class="hero-number">{rewindData.global_stats.total_memes}</div>
+        <div class="hero-unit">memes revisados · {rewindData.global_stats.avg_score}⭐ promedio</div>
+
+        {#if rewindData.global_stats.platform_breakdown}
+          <div class="platform-grid">
+            {#each Object.entries(rewindData.global_stats.platform_breakdown) as [platform, count]}
+              <div class="platform-card">
+                <span class="platform-emoji">{PLATFORM_EMOJI[platform] || '🎬'}</span>
+                <span class="platform-count">{count}</span>
+                <span class="platform-name">{PLATFORM_NAME[platform]}</span>
+              </div>
+            {/each}
+          </div>
+        {/if}
+      </div>
+    {/if}
+
+    <!-- Year breakdown -->
     {#each Object.entries(rewindData.years).sort((a, b) => parseInt(b[0]) - parseInt(a[0])) as [year, yearData]}
       {@const calData = buildCalendarGrid(parseInt(year), yearData.memes)}
       <div class="year-section">
@@ -159,9 +199,8 @@
 
         {#if calData.weeks.length > 0}
           <div class="section">
-            <h3 class="section-title">Actividad Diaria</h3>
+            <h3 class="section-title">📅 Actividad Diaria</h3>
             <div class="heatmap-wrap">
-              <!-- Months row -->
               <div class="heatmap-months" style="grid-template-columns: 20px repeat({calData.weeks.length}, 10px);">
                 <div></div>
                 {#each calData.weeks as _, col}
@@ -170,7 +209,6 @@
                 {/each}
               </div>
 
-              <!-- Days + grid -->
               <div class="heatmap-body">
                 <div class="day-labels">
                   {#each DAYS as d, i}
@@ -197,7 +235,6 @@
                 </div>
               </div>
 
-              <!-- Legend -->
               <div class="heat-legend">
                 <span>Menos</span>
                 <div class="heat-cell" style="background-color: rgba(255,255,255,0.05)"></div>
@@ -211,6 +248,38 @@
           </div>
         {/if}
 
+        <!-- Super Favorites -->
+        {#if yearData.super_favorites && yearData.super_favorites.length > 0}
+          <div class="section">
+            <h3 class="section-title">⭐ Super Favoritos ({yearData.super_favorites.length})</h3>
+            <div class="memes-list">
+              {#each yearData.super_favorites.slice(0, 5) as meme}
+                <a href={meme.url} target="_blank" rel="noopener noreferrer" class="meme-item super">
+                  <div class="thumbnail" style="background: {getPlatformColor(meme.url)};">
+                    {#if meme.thumbnail_url && !failedThumbnails.has(meme.id)}
+                      <img
+                        src={meme.thumbnail_url}
+                        alt="meme"
+                        class="thumbnail-img"
+                        onerror={() => handleImageError(meme.id)}
+                      />
+                    {:else}
+                      <span class="platform-emoji">{getPlatformEmoji(meme.url)}</span>
+                    {/if}
+                  </div>
+                  <div class="meme-content">
+                    <div class="score-row">
+                      <span class="score">{meme.avg_vote}⭐</span>
+                      <span class="percentile">{Math.round(meme.percentile)}th %ile</span>
+                    </div>
+                    <div class="meta">{formatDate(meme.reviewed_at)}</div>
+                  </div>
+                </a>
+              {/each}
+            </div>
+          </div>
+        {/if}
+
         <!-- Top 3 -->
         {#if yearData.memes && yearData.memes.length > 0}
           <div class="section">
@@ -220,7 +289,16 @@
                 <a href={meme.url} target="_blank" rel="noopener noreferrer" class="meme-item top">
                   <div class="rank">#{idx + 1}</div>
                   <div class="thumbnail" style="background: {getPlatformColor(meme.url)};">
-                    <span class="platform-emoji">{getPlatformEmoji(meme.url)}</span>
+                    {#if meme.thumbnail_url && !failedThumbnails.has(meme.id)}
+                      <img
+                        src={meme.thumbnail_url}
+                        alt="meme"
+                        class="thumbnail-img"
+                        onerror={() => handleImageError(meme.id)}
+                      />
+                    {:else}
+                      <span class="platform-emoji">{getPlatformEmoji(meme.url)}</span>
+                    {/if}
                   </div>
                   <div class="meme-content">
                     <div class="score-row">
@@ -244,7 +322,16 @@
                 <a href={meme.url} target="_blank" rel="noopener noreferrer" class="meme-item bottom">
                   <div class="rank">#{idx + 1}</div>
                   <div class="thumbnail" style="background: {getPlatformColor(meme.url)};">
-                    <span class="platform-emoji">{getPlatformEmoji(meme.url)}</span>
+                    {#if meme.thumbnail_url && !failedThumbnails.has(meme.id)}
+                      <img
+                        src={meme.thumbnail_url}
+                        alt="meme"
+                        class="thumbnail-img"
+                        onerror={() => handleImageError(meme.id)}
+                      />
+                    {:else}
+                      <span class="platform-emoji">{getPlatformEmoji(meme.url)}</span>
+                    {/if}
                   </div>
                   <div class="meme-content">
                     <div class="score-row">
@@ -264,10 +351,76 @@
 {/if}
 
 <style>
+  :global(body) {
+    background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+  }
+
   .rewind-wrapper {
     max-width: 900px;
     margin: 0 auto;
     padding: 2rem 1rem;
+  }
+
+  .global-hero {
+    text-align: center;
+    margin-bottom: 3rem;
+    padding: 2rem;
+    background: rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(10px);
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: white;
+  }
+
+  .hero-kicker {
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: rgba(255, 255, 255, 0.7);
+    margin-bottom: 0.5rem;
+  }
+
+  .hero-number {
+    font-size: 3rem;
+    font-weight: 900;
+    margin: 0.5rem 0;
+  }
+
+  .hero-unit {
+    font-size: 0.9rem;
+    color: rgba(255, 255, 255, 0.8);
+  }
+
+  .platform-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+    gap: 1rem;
+    margin-top: 2rem;
+  }
+
+  .platform-card {
+    background: rgba(255, 255, 255, 0.1);
+    padding: 1rem;
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .platform-emoji {
+    font-size: 1.5rem;
+  }
+
+  .platform-count {
+    font-size: 1.5rem;
+    font-weight: 700;
+  }
+
+  .platform-name {
+    font-size: 0.75rem;
+    opacity: 0.8;
   }
 
   .year-section {
@@ -321,7 +474,6 @@
     margin-top: 0;
   }
 
-  /* Heatmap */
   .heatmap-wrap {
     overflow-x: auto;
     padding-bottom: 1rem;
@@ -394,7 +546,6 @@
     border: none;
   }
 
-  /* Memes list */
   .memes-list {
     display: flex;
     flex-direction: column;
@@ -410,6 +561,16 @@
     text-decoration: none;
     transition: all 0.2s ease;
     border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .meme-item.super {
+    background: rgba(255, 215, 0, 0.1);
+    border-color: rgba(255, 215, 0, 0.3);
+  }
+
+  .meme-item.super:hover {
+    background: rgba(255, 215, 0, 0.15);
+    border-color: rgba(255, 215, 0, 0.5);
   }
 
   .meme-item.top {
@@ -467,6 +628,13 @@
 
   .platform-emoji {
     filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
+  }
+
+  .thumbnail-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 8px;
   }
 
   .meme-content {
@@ -531,6 +699,10 @@
     .rank {
       width: 100%;
       min-width: 100%;
+    }
+
+    .platform-grid {
+      grid-template-columns: repeat(2, 1fr);
     }
   }
 </style>

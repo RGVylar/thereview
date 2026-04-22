@@ -231,6 +231,7 @@ def get_rewind_stats(
             meme_data = {
                 "id": meme.id,
                 "url": meme.url,
+                "thumbnail_url": meme.thumbnail_url,
                 "reviewed_at": meme.reviewed_at.isoformat(),
                 "avg_vote": round(avg_vote, 2),
                 "max_vote": max_vote,
@@ -270,5 +271,32 @@ def get_rewind_stats(
 
         result[str(year)] = year_data
 
-    return {"years": result}
+    # Global statistics
+    all_votes = []
+    platform_counts = {}
+    for meme in reviewed_memes:
+        votes = db.query(Vote).filter(Vote.meme_id == meme.id).all()
+        if votes:
+            vote_values = [v.value for v in votes]
+            all_votes.append(sum(vote_values) / len(vote_values))
+
+        platform = "otro"
+        if "tiktok" in meme.url:
+            platform = "tiktok"
+        elif "twitter" in meme.url or "x.com" in meme.url:
+            platform = "twitter"
+        elif "instagram" in meme.url:
+            platform = "instagram"
+        elif "youtube" in meme.url:
+            platform = "youtube"
+
+        platform_counts[platform] = platform_counts.get(platform, 0) + 1
+
+    global_stats = {
+        "total_memes": len(reviewed_memes),
+        "avg_score": round(sum(all_votes) / len(all_votes), 2) if all_votes else 0,
+        "platform_breakdown": platform_counts,
+    }
+
+    return {"years": result, "global_stats": global_stats}
 
