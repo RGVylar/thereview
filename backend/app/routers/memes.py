@@ -233,6 +233,19 @@ def get_rewind_stats(
             if meme.id in super_fav_ids:
                 year_data["super_favorites"].append(meme_data)
 
+        # Calculate percentile for each meme (normalized by year average)
+        if year_data["memes"]:
+            avg_scores = [m["avg_vote"] for m in year_data["memes"]]
+            year_avg = sum(avg_scores) / len(avg_scores) if avg_scores else 0
+
+            for meme in year_data["memes"]:
+                # Percentile: position in sorted list
+                sorted_scores = sorted([m["avg_vote"] for m in year_data["memes"]], reverse=True)
+                position = sorted_scores.index(meme["avg_vote"]) + 1
+                meme["percentile"] = (100 * (len(sorted_scores) - position + 1)) / len(sorted_scores)
+                # Deviation from year average
+                meme["deviation_from_avg"] = round(meme["avg_vote"] - year_avg, 2)
+
         # Sort by average vote descending
         year_data["memes"].sort(key=lambda m: m["avg_vote"], reverse=True)
 

@@ -223,7 +223,10 @@
                     <span class="platform-emoji">{getPlatformEmoji(meme.url)}</span>
                   </div>
                   <div class="meme-content">
-                    <div class="score">{meme.avg_vote}⭐</div>
+                    <div class="score-row">
+                      <span class="score">{meme.avg_vote}⭐</span>
+                      <span class="percentile">{Math.round(meme.percentile)}th %ile</span>
+                    </div>
                     <div class="meta">{formatDate(meme.reviewed_at)}</div>
                   </div>
                 </a>
@@ -244,7 +247,10 @@
                     <span class="platform-emoji">{getPlatformEmoji(meme.url)}</span>
                   </div>
                   <div class="meme-content">
-                    <div class="score">{meme.avg_vote}⭐</div>
+                    <div class="score-row">
+                      <span class="score">{meme.avg_vote}⭐</span>
+                      <span class="percentile">{Math.round(meme.percentile)}th %ile</span>
+                    </div>
                     <div class="meta">{formatDate(meme.reviewed_at)}</div>
                   </div>
                 </a>
@@ -467,10 +473,25 @@
     flex: 1;
   }
 
+  .score-row {
+    display: flex;
+    align-items: baseline;
+    gap: 0.6rem;
+  }
+
   .score {
-    font-size: 1.2rem;
+    font-size: 1.3rem;
     font-weight: 700;
     color: var(--text);
+  }
+
+  .percentile {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    background: rgba(255, 255, 255, 0.05);
+    padding: 0.2rem 0.5rem;
+    border-radius: 4px;
   }
 
   .meta {
