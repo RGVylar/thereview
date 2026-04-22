@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session as DBSession
 
 from app.auth import get_current_user
 from app.database import get_db
-from app.models import Meme, User, Vote, SuperFavorite
+from app.models import Meme, User, Vote, SuperFavorite, Session, SessionMeme, SessionUser
 from app.schemas import DeadCheckRequest, DeadCheckResponse, MemeBatchCreate, MemeBatchResult, MemeCreate, MemeList, MemeOut
 
 router = APIRouter(prefix="/api/memes", tags=["memes"])
@@ -164,10 +164,21 @@ def get_rewind_stats(
     current_user: User = Depends(get_current_user),
 ):
     """Get year-by-year review statistics for rewind view."""
-    # Get all reviewed memes for current user grouped by year
+    # Get all sessions where current user participated (as creator or participant)
+    user_sessions = db.query(Session.id).filter(
+        (Session.created_by == current_user.id) |
+        (Session.participants.any(SessionUser.user_id == current_user.id))
+    ).all()
+    session_ids = [s[0] for s in user_sessions]
+
+    if not session_ids:
+        return {"years": {}}
+
+    # Get all reviewed memes from those sessions
     reviewed_memes = (
         db.query(Meme)
-        .filter(Meme.user_id == current_user.id, Meme.reviewed_at.isnot(None))
+        .join(SessionMeme)
+        .filter(SessionMeme.session_id.in_(session_ids), Meme.reviewed_at.isnot(None))
         .order_by(Meme.reviewed_at.desc())
         .all()
     )
