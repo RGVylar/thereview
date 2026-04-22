@@ -2,8 +2,8 @@
   import { auth } from '$lib/auth.js';
   import { api } from '$lib/api.js';
 
-  let rewindData = null;
-  let error = null;
+  let rewindData = $state(null);
+  let error = $state(null);
   let authVal = $state(null);
   let isLoading = $state(true);
   let failedThumbnails = $state(new Set());
@@ -169,7 +169,7 @@
     <!-- Global Stats -->
     {#if rewindData.global_stats}
       <div class="global-hero">
-        <div class="hero-kicker">TU ACTIVIDAD EN 2026</div>
+        <div class="hero-kicker">TU HISTORIAL DE REVIEWS</div>
         <div class="hero-number">{rewindData.global_stats.total_memes}</div>
         <div class="hero-unit">memes revisados · {rewindData.global_stats.avg_score}⭐ promedio</div>
 
@@ -280,12 +280,12 @@
           </div>
         {/if}
 
-        <!-- Top 3 -->
-        {#if yearData.memes && yearData.memes.length > 0}
+        <!-- Top 3 (only voted memes) -->
+        {#if yearData.memes && yearData.memes.filter(m => m.vote_count > 0).length > 0}
           <div class="section">
             <h3 class="section-title">🏆 Top 3</h3>
             <div class="memes-list">
-              {#each yearData.memes.slice(0, 3) as meme, idx}
+              {#each yearData.memes.filter(m => m.vote_count > 0).slice(0, 3) as meme, idx}
                 <a href={meme.url} target="_blank" rel="noopener noreferrer" class="meme-item top">
                   <div class="rank">#{idx + 1}</div>
                   <div class="thumbnail" style="background: {getPlatformColor(meme.url)};">
@@ -313,12 +313,12 @@
           </div>
         {/if}
 
-        <!-- Bottom 3 -->
-        {#if yearData.memes && yearData.memes.length > 0}
+        <!-- Bottom 3 (only voted memes) -->
+        {#if yearData.memes && yearData.memes.filter(m => m.vote_count > 0).length > 0}
           <div class="section">
             <h3 class="section-title">📉 Bottom 3</h3>
             <div class="memes-list">
-              {#each [...yearData.memes].reverse().slice(0, 3) as meme, idx}
+              {#each [...yearData.memes].filter(m => m.vote_count > 0).reverse().slice(0, 3) as meme, idx}
                 <a href={meme.url} target="_blank" rel="noopener noreferrer" class="meme-item bottom">
                   <div class="rank">#{idx + 1}</div>
                   <div class="thumbnail" style="background: {getPlatformColor(meme.url)};">
