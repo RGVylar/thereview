@@ -389,8 +389,8 @@
 		padding: 0.25rem 0.65rem;
 		border-radius: 999px;
 	}
-	.ext-ok  { background: rgba(94,227,210,0.1); color: var(--teal); }
-	.ext-pending { background: rgba(255,165,0,0.08); color: #ff9800; }
+	.ext-ok  { background: rgba(94,227,210,0.1); color: var(--teal); border: 1px solid rgba(94,227,210,0.25); }
+	.ext-pending { background: rgba(255,165,0,0.08); color: #ff9800; border: 1px solid rgba(255,165,0,0.15); }
 
 	.ext-dot {
 		width: 6px;

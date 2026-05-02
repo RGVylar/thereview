@@ -1015,43 +1015,77 @@
 	{/if}
 
 	{#if session}
-		<div class="session-header">
-			<div class="session-header-top">
-				<h2 class="page-title">{session.name}</h2>
-				{#if session.status === 'active'}
-					<button
-						class="btn-notepad"
-						class:active={noteVisible}
-						onclick={() => (noteVisible = !noteVisible)}
-						title="Notas compartidas"
-					>📝</button>
-				{/if}
-			</div>
-			<div class="header-meta">
-				<div class="participants">
-					{#each session.participants as p}
-						{@const pbs = playbackStates[p.id]}
-						<span class="chip">
-							{#if pbs?.playing}<span title="Reproduciendo">🟢</span>{:else if pbs}<span title="Pausado">⏸</span>{/if}
-							{p.display_name}
-						</span>
-					{/each}
+		<div class="session-header glass">
+			<div class="session-header-inner">
+				<!-- Left: back + session name + status -->
+				<div class="sh-left">
+					<button class="btn-ghost btn-icon" onclick={() => goto('/sessions')} title="Volver a sesiones" style="width:34px;height:34px;flex-shrink:0">‹</button>
+					<div class="sh-title-group">
+						<div style="display:flex;align-items:center;gap:0.6rem">
+							<h2 class="sh-title">{session.name}</h2>
+							{#if session.status === 'active'}
+								<span class="chip chip-teal sh-live-chip">
+									<span class="live-dot"></span>
+									LIVE
+								</span>
+							{:else if session.status === 'pending'}
+								<span class="chip sh-status-chip">⏳ PENDING</span>
+							{/if}
+						</div>
+						<div class="sh-meta">
+							{#if session.status === 'active'}
+								<span class="mono tabular sh-timer">⏱ {elapsed}</span>
+								<span class="sh-sep">·</span>
+							{/if}
+							{#each session.participants as p, i}
+								{@const pbs = playbackStates[p.id]}
+								<span class="sh-participant">
+									{#if pbs?.playing}🟢{:else if pbs}⏸{/if}
+									{p.display_name}
+								</span>
+								{#if i < session.participants.length - 1}<span class="sh-sep">·</span>{/if}
+							{/each}
+							{#if connectedUsers > 0}
+								<span class="sh-sep">·</span>
+								<span class="sh-online">{connectedUsers} online</span>
+							{/if}
+						</div>
+					</div>
 				</div>
-				{#if session.status === 'active'}
-					<div class="sync-bar">
-						<span class="timer">⏱️ {elapsed}</span>
-						<span class="connected">🟢 {connectedUsers} online</span>
+
+				<!-- Center: session progress bar -->
+				{#if session.status === 'active' && view === 'presentation'}
+					<div class="sh-progress">
+						<div style="display:flex;justify-content:space-between;font-size:0.68rem;margin-bottom:3px;color:var(--text-muted)">
+							<span>Sesión</span>
+							<span class="mono tabular">{Math.round((currentIndex + 1) / session.session_memes.length * 100)}%</span>
+						</div>
+						<div class="sh-prog-track">
+							<div class="sh-prog-fill" style="width:{((currentIndex + 1) / session.session_memes.length) * 100}%"></div>
+						</div>
 					</div>
 				{/if}
+
+				<!-- Right: notepad toggle + notifications -->
+				<div class="sh-right">
 					{#if autoplayReady === false}
-						<p class="autoplay-hint">Activa este embed con un primer Play local para que la sincronización automática funcione desde el inicio.</p>
+						<p class="autoplay-hint" style="font-size:0.72rem;margin:0">▶ Activa el embed primero</p>
 					{/if}
 					{#if outOfSync}
-						<p class="out-of-sync-hint">▶ Pulsa Play en el player para unirte al grupo</p>
+						<p class="out-of-sync-hint" style="font-size:0.72rem;margin:0">▶ Pulsa Play para unirte</p>
 					{/if}
 					{#if syncMessage}
-					<p class="sync-toast">{syncMessage}</p>
-				{/if}
+						<p class="sync-toast" style="margin:0">{syncMessage}</p>
+					{/if}
+					{#if session.status === 'active'}
+						<button
+							class="btn-glass sh-notepad-btn"
+							class:sh-notepad-active={noteVisible}
+							onclick={() => (noteVisible = !noteVisible)}
+							title="Sidebar (participantes + reacciones + notas)"
+						>📝 Sidebar</button>
+					{/if}
+				</div>
 			</div>
 		</div>
 
@@ -1408,19 +1442,83 @@
 
 					</div>
 
-					<!-- Notepad: appears as extra column to the right of nav -->
+					<!-- Notepad sidebar: participants + reactions + notepad -->
 					{#if noteVisible}
 						<div class="notepad-panel">
-							<div class="notepad-header">
-								<span>📝 Notas</span>
-								<button class="notepad-close" onclick={() => (noteVisible = false)}>✕</button>
+							<!-- Participants card -->
+							<div class="sidebar-card">
+								<div class="sidebar-card-header">
+									<span class="eyebrow" style="font-size:0.6rem">En la sala</span>
+									<span class="chip chip-teal" style="font-size:0.65rem;padding:0.15rem 0.55rem;display:inline-flex;align-items:center;gap:5px">
+										<span class="live-dot"></span>
+										{connectedUsers} online
+									</span>
+								</div>
+								<div class="participants-list">
+									{#each session.participants as p}
+										{@const voted = votes.some(v => v.meme_id === currentMeme()?.meme?.id && v.user_id === p.id)}
+										{@const isMe = p.id === authVal.user?.id}
+										<div class="participant-row">
+											<div class="participant-avatar">{p.display_name.slice(0,2).toUpperCase()}</div>
+											<div class="participant-info">
+												<div class="participant-name">
+													{p.display_name}
+													{#if isMe}<span class="muted" style="font-weight:400;font-size:0.72rem">(tú)</span>{/if}
+												</div>
+												<div class="participant-status" style="color:{voted ? 'var(--teal)' : 'var(--text-muted)'}">
+													{voted ? '✓ ha votado' : 'votando…'}
+												</div>
+											</div>
+											{#if voted}<span style="color:var(--teal);font-size:0.85rem">✓</span>{/if}
+										</div>
+									{/each}
+								</div>
 							</div>
-							<textarea
-								class="notepad-textarea"
-								bind:value={noteText}
-								oninput={(e) => sendNote(e.target.value)}
-								placeholder="Notas compartidas…"
-							></textarea>
+
+							<!-- Reactions card -->
+							<div class="sidebar-card">
+								<div class="sidebar-card-header">
+									<span class="eyebrow" style="font-size:0.6rem">Reacciones</span>
+									<span class="chip" style="font-size:0.65rem;padding:0.15rem 0.55rem;display:inline-flex;align-items:center;gap:5px">
+										<span class="live-dot" style="background:var(--teal);box-shadow:0 0 6px var(--teal)"></span>
+										live
+									</span>
+								</div>
+								<div class="reactions-grid">
+									{#each FUN_BUTTONS as emoji}
+										{@const count = emojiCounts[emoji] || 0}
+										<button
+											class="reaction-btn"
+											class:reaction-active={count > 0}
+											onclick={() => sendFunTap(emoji)}
+										>
+											<span>{emoji}</span>
+											{#if count > 0}<span class="reaction-count">{count}</span>{/if}
+										</button>
+									{/each}
+								</div>
+							</div>
+
+							<!-- Notepad -->
+							<div class="sidebar-card notepad-grow">
+								<div class="sidebar-card-header">
+									<span class="eyebrow" style="font-size:0.6rem">📝 Notepad compartido</span>
+									<div style="display:flex;align-items:center;gap:0.5rem">
+										<span class="chip" style="font-size:0.65rem;padding:0.15rem 0.55rem;display:inline-flex;align-items:center;gap:4px">
+											<span class="live-dot" style="background:var(--teal);box-shadow:0 0 6px var(--teal)"></span>
+											sync
+										</span>
+										<button class="notepad-close" onclick={() => (noteVisible = false)}>✕</button>
+									</div>
+								</div>
+								<textarea
+									class="notepad-textarea"
+									bind:value={noteText}
+									oninput={(e) => sendNote(e.target.value)}
+									placeholder="Apunta los momentazos, frases míticas, ideas…"
+								></textarea>
+							</div>
+
 							<a
 								href="https://ko-fi.com/Z8Z81OW7UV"
 								target="_blank"
@@ -1832,34 +1930,95 @@
 </div>
 
 <style>
+	/* ── Session header (new glassmorphism bar) ── */
 	.session-header {
 		margin-bottom: 1rem;
+		padding: 0.75rem 1.1rem;
+		border-radius: 14px;
 	}
-	.header-meta {
+	.session-header-inner {
+		display: flex;
+		align-items: center;
+		gap: 1rem;
+	}
+	.sh-left {
+		display: flex;
+		align-items: center;
+		gap: 0.6rem;
+		flex: 0 1 auto;
+		min-width: 0;
+	}
+	.sh-title-group {
 		display: flex;
 		flex-direction: column;
-		gap: 0.5rem;
-		margin-top: 0.5rem;
+		gap: 0.2rem;
+		min-width: 0;
 	}
-	.participants {
-		display: flex;
-		gap: 0.5rem;
-		flex-wrap: wrap;
-	}
-	.sync-bar {
-		display: flex;
-		gap: 1rem;
-		align-items: center;
-		font-size: 0.85rem;
-	}
-	.timer {
+	.sh-title {
+		font-size: 1rem;
 		font-weight: 700;
-		font-variant-numeric: tabular-nums;
-		color: var(--accent);
+		letter-spacing: -0.01em;
+		margin: 0;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
 	}
-	.connected {
+	.sh-live-chip {
+		display: inline-flex;
+		align-items: center;
+		gap: 5px;
+		font-size: 0.68rem;
+		padding: 0.18rem 0.55rem;
+	}
+	.sh-status-chip {
+		font-size: 0.68rem;
+		padding: 0.18rem 0.55rem;
+	}
+	.sh-meta {
+		display: flex;
+		align-items: center;
+		gap: 0.35rem;
+		flex-wrap: wrap;
+		font-size: 0.72rem;
 		color: var(--text-muted);
 	}
+	.sh-timer {
+		font-weight: 700;
+		color: var(--coral);
+	}
+	.sh-sep { opacity: 0.4; }
+	.sh-participant { color: var(--text-soft); }
+	.sh-online { color: var(--teal); font-weight: 600; }
+	.sh-progress {
+		width: 200px;
+		flex-shrink: 0;
+	}
+	.sh-prog-track {
+		height: 5px;
+		background: rgba(255,255,255,0.08);
+		border-radius: 999px;
+		overflow: hidden;
+	}
+	.sh-prog-fill {
+		height: 100%;
+		background: linear-gradient(90deg, var(--teal), var(--violet));
+		border-radius: 999px;
+		transition: width 0.4s ease;
+	}
+	.sh-right {
+		margin-left: auto;
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		flex-shrink: 0;
+	}
+	.sh-notepad-btn { font-size: 0.82rem; padding: 0.4rem 0.75rem; }
+	.sh-notepad-active {
+		background: rgba(94,227,210,0.12) !important;
+		border-color: rgba(94,227,210,0.3) !important;
+		color: var(--teal) !important;
+	}
+
 	.sync-toast {
 		font-size: 0.8rem;
 		color: var(--text-muted);
@@ -3008,22 +3167,129 @@
 
 	/* ── Inline notepad panel (flex sibling of right-panel in meme-and-nav) ── */
 	.notepad-panel {
-		width: 210px;
+		width: 300px;
 		flex-shrink: 0;
-		background: rgba(255,255,255,0.04);
-		border: 1px solid rgba(255,255,255,0.1);
-		border-radius: 12px;
 		display: flex;
 		flex-direction: column;
-		overflow: hidden;
-		max-height: calc(100vh - 160px);
+		gap: 0.6rem;
+		max-height: calc(100vh - 140px);
 		align-self: flex-start;
 		position: sticky;
 		top: 1rem;
+		overflow-y: auto;
 	}
-	.notepad-panel .notepad-textarea {
-		min-height: 200px;
+	.sidebar-card {
+		background: var(--glass-bg);
+		backdrop-filter: blur(20px);
+		-webkit-backdrop-filter: blur(20px);
+		border: 1px solid var(--glass-border);
+		border-radius: 14px;
+		overflow: hidden;
+		flex-shrink: 0;
+	}
+	.notepad-grow {
 		flex: 1;
+		display: flex;
+		flex-direction: column;
+	}
+	.sidebar-card-header {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		padding: 0.7rem 0.85rem 0.5rem;
+		gap: 0.5rem;
+	}
+	.live-dot {
+		width: 6px;
+		height: 6px;
+		border-radius: 50%;
+		background: var(--teal);
+		box-shadow: 0 0 6px var(--teal);
+		animation: statusPulse 1.4s ease-in-out infinite;
+		flex-shrink: 0;
+	}
+	@keyframes statusPulse {
+		0%, 100% { opacity: 1; transform: scale(1); }
+		50% { opacity: 0.5; transform: scale(0.75); }
+	}
+
+	/* Participants list */
+	.participants-list {
+		display: flex;
+		flex-direction: column;
+		gap: 0.4rem;
+		padding: 0 0.85rem 0.85rem;
+	}
+	.participant-row {
+		display: flex;
+		align-items: center;
+		gap: 0.55rem;
+	}
+	.participant-avatar {
+		width: 30px;
+		height: 30px;
+		border-radius: 10px;
+		background: linear-gradient(135deg, var(--coral), var(--violet));
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		font-size: 0.65rem;
+		font-weight: 700;
+		flex-shrink: 0;
+	}
+	.participant-info {
+		flex: 1;
+		min-width: 0;
+	}
+	.participant-name {
+		font-size: 0.82rem;
+		font-weight: 600;
+		line-height: 1.2;
+	}
+	.participant-status {
+		font-size: 0.7rem;
+	}
+
+	/* Reactions grid */
+	.reactions-grid {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 5px;
+		padding: 0 0.85rem 0.85rem;
+	}
+	.reaction-btn {
+		position: relative;
+		min-width: 38px;
+		height: 38px;
+		padding: 0 8px;
+		border-radius: 11px;
+		background: rgba(255,255,255,0.04);
+		border: 1px solid rgba(255,255,255,0.08);
+		color: var(--text);
+		font-family: inherit;
+		cursor: pointer;
+		font-size: 1.1rem;
+		display: inline-flex;
+		align-items: center;
+		gap: 5px;
+		transition: transform 0.1s, background 0.15s;
+	}
+	.reaction-btn.reaction-active {
+		background: rgba(255,84,112,0.12);
+		border-color: rgba(255,84,112,0.3);
+	}
+	.reaction-btn:hover { background: rgba(255,255,255,0.1); }
+	.reaction-btn:active { transform: scale(0.88); }
+	.reaction-count {
+		font-family: var(--font-mono);
+		font-size: 0.68rem;
+		font-weight: 700;
+		color: var(--coral-bright);
+	}
+
+	.notepad-panel .notepad-textarea {
+		flex: 1;
+		min-height: 160px;
 	}
 	.kofi-link-panel {
 		display: block;
