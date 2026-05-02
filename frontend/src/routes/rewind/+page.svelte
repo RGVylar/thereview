@@ -95,12 +95,12 @@
 
   function heatColor(count, maxCount, inYear) {
     if (!inYear)   return 'transparent';
-    if (!count)    return 'rgba(233,69,96,0.07)';
+    if (!count)    return 'rgba(255,84,112,0.07)';
     const t = count / maxCount;
-    if (t < 0.25)  return 'rgba(233,69,96,0.25)';
-    if (t < 0.5)   return 'rgba(233,69,96,0.5)';
-    if (t < 0.75)  return 'rgba(233,69,96,0.75)';
-    return '#e94560';
+    if (t < 0.25)  return 'rgba(255,84,112,0.25)';
+    if (t < 0.5)   return 'rgba(255,84,112,0.5)';
+    if (t < 0.75)  return 'rgba(255,84,112,0.75)';
+    return '#ff5470';
   }
 
   function formatDate(s) {
@@ -206,7 +206,7 @@
               <div class="cal-legend">
                 <span>Menos</span>
                 {#each [0.07,0.25,0.5,0.75,1] as a}
-                  <div class="cal-cell" style="background:rgba(233,69,96,{a})"></div>
+                  <div class="cal-cell" style="background:rgba(255,84,112,{a})"></div>
                 {/each}
                 <span>Más</span>
               </div>
@@ -303,9 +303,12 @@
   }
 
   .card {
-    background: var(--bg-card);
-    border-radius: var(--radius);
-    box-shadow: var(--shadow);
+    background: var(--glass-bg);
+    backdrop-filter: blur(28px) saturate(160%);
+    -webkit-backdrop-filter: blur(28px) saturate(160%);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--r-lg);
+    box-shadow: inset 0 1px 0 var(--glass-highlight), var(--shadow-md);
     padding: 1.5rem;
   }
 
@@ -364,10 +367,13 @@
     display: flex;
     align-items: center;
     gap: 0.35rem;
-    background: var(--bg-input);
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
     border-radius: 99px;
     padding: 0.3rem 0.75rem;
     font-size: 0.82rem;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
   }
   .plat-n    { font-weight: 700; color: var(--text); }
   .plat-name { color: var(--text-muted); font-size: 0.75rem; }
@@ -395,10 +401,13 @@
     font-size: 0.75rem;
     padding: 0.25rem 0.65rem;
     border-radius: 99px;
-    background: var(--bg-input);
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
     color: var(--text-muted);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
   }
-  .chip-gold { background: rgba(255,215,0,0.12); color: #ffd700; }
+  .chip-gold { background: rgba(255,209,102,0.14); border-color: rgba(255,209,102,0.3); color: var(--gold); }
 
   /* ── HEATMAP ── */
   .heatmap-section { margin-bottom: 1.5rem; }
@@ -512,21 +521,21 @@
   }
 
   .meme-top {
-    background: rgba(102,126,234,0.06);
-    border-color: rgba(102,126,234,0.15);
+    background: rgba(255,209,102,0.06);
+    border-color: rgba(255,209,102,0.18);
   }
   .meme-top:hover {
-    background: rgba(102,126,234,0.12);
-    border-color: rgba(102,126,234,0.3);
+    background: rgba(255,209,102,0.12);
+    border-color: rgba(255,209,102,0.32);
   }
 
   .meme-bottom {
-    background: rgba(233,69,96,0.06);
-    border-color: rgba(233,69,96,0.15);
+    background: rgba(255,84,112,0.06);
+    border-color: rgba(255,84,112,0.15);
   }
   .meme-bottom:hover {
-    background: rgba(233,69,96,0.12);
-    border-color: rgba(233,69,96,0.3);
+    background: rgba(255,84,112,0.12);
+    border-color: rgba(255,84,112,0.3);
   }
 
   .medal {

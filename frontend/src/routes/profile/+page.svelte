@@ -454,7 +454,7 @@
 				</div>
 			{/if}
 
-			{#if importStep === 'importing'}}
+			{#if importStep === 'importing'}
 				<div class="import-progress">
 					<p>Importando… {importDone + importFailed + importSkipped} / {importUrls.length - importDead}</p>
 					<div class="progress-bar-wrap">

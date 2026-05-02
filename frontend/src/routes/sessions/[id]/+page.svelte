@@ -1727,10 +1727,15 @@
 		to { opacity: 1; }
 	}
 	.chip {
-		background: var(--bg-input);
-		padding: 0.3rem 0.7rem;
-		border-radius: 20px;
-		font-size: 0.8rem;
+		background: var(--glass-bg);
+		backdrop-filter: blur(10px);
+		-webkit-backdrop-filter: blur(10px);
+		border: 1px solid var(--glass-border);
+		padding: 0.3rem 0.75rem;
+		border-radius: 999px;
+		font-size: 0.78rem;
+		font-weight: 500;
+		color: var(--text-soft);
 	}
 	.center-card {
 		text-align: center;
@@ -2008,6 +2013,13 @@
 		align-items: center;
 		flex-wrap: wrap;
 		gap: 0.5rem;
+		padding: 1.25rem 1.5rem;
+		background: var(--glass-bg-strong);
+		backdrop-filter: blur(32px) saturate(180%);
+		-webkit-backdrop-filter: blur(32px) saturate(180%);
+		border: 1px solid var(--glass-border-strong);
+		border-radius: var(--r-lg);
+		box-shadow: inset 0 1px 0 var(--glass-highlight), var(--shadow-md);
 	}
 	.ranking-actions { display: flex; gap: 0.5rem; }
 
@@ -2659,8 +2671,9 @@
 	/* ── Session page (full-width) ── */
 	.session-page {
 		width: 100%;
-		max-width: 100%;
-		padding: 0 1rem;
+		max-width: 1100px;
+		margin: 0 auto;
+		padding: 1rem 1.25rem 3rem;
 		box-sizing: border-box;
 	}
 
@@ -2884,11 +2897,14 @@
 	.global-heatmap-wrap {
 		display: flex;
 		flex-direction: column;
-		gap: 0.3rem;
-		padding: 0.75rem 0.5rem;
-		background: rgba(255,255,255,0.02);
-		border: 1px solid rgba(255,255,255,0.06);
-		border-radius: 12px;
+		gap: 0.4rem;
+		padding: 1rem 1.1rem;
+		background: var(--glass-bg);
+		backdrop-filter: blur(20px);
+		-webkit-backdrop-filter: blur(20px);
+		border: 1px solid var(--glass-border);
+		border-radius: var(--r-lg);
+		box-shadow: inset 0 1px 0 var(--glass-highlight), var(--shadow-sm);
 	}
 	.global-heatmap-labels {
 		display: flex;

@@ -4,9 +4,7 @@
 	import { goto } from '$app/navigation';
 
 	let authVal = $state(null);
-	auth.subscribe((v) => {
-		authVal = v;
-	});
+	auth.subscribe((v) => { authVal = v; });
 
 	let sessions = $state([]);
 	let showCreate = $state(false);
@@ -19,28 +17,21 @@
 	let loading = $state(false);
 
 	$effect(() => {
-		if (!authVal?.token) {
-			goto('/login');
-			return;
-		}
+		if (!authVal?.token) { goto('/login'); return; }
 		loadSessions();
 	});
 
 	async function loadSessions() {
 		try {
 			sessions = await api('/api/sessions', { token: authVal.token });
-		} catch (e) {
-			error = e.message;
-		}
+		} catch (e) { error = e.message; }
 	}
 
 	async function openCreate() {
 		showCreate = true;
 		try {
 			users = await api('/api/auth/users', { token: authVal.token });
-		} catch (e) {
-			error = e.message;
-		}
+		} catch (e) { error = e.message; }
 	}
 
 	function toggleUser(id) {
@@ -67,16 +58,17 @@
 				token: authVal.token
 			});
 			goto(`/sessions/${session.id}`);
-		} catch (e) {
-			error = e.message;
-		} finally {
-			loading = false;
-		}
+		} catch (e) { error = e.message; }
+		finally { loading = false; }
 	}
 
-	function statusLabel(status) {
-		const map = { pending: '⏳ Pendiente', active: '▶️ Activa', finished: '✅ Terminada' };
-		return map[status] || status;
+	function statusInfo(status) {
+		const map = {
+			pending:  { label: 'Pendiente', dot: '#ffd166' },
+			active:   { label: 'Activa',    dot: '#5ee3d2' },
+			finished: { label: 'Terminada', dot: '#9b6bff' },
+		};
+		return map[status] || map.pending;
 	}
 
 	function isNewInvite(s) {
@@ -88,257 +80,346 @@
 		try {
 			await api(`/api/sessions/${id}`, { method: 'DELETE', token: authVal.token });
 			sessions = sessions.filter((s) => s.id !== id);
-		} catch (e) {
-			error = e.message;
-		}
+		} catch (e) { error = e.message; }
 	}
 </script>
 
-<div class="container">
-	<div class="header">
-		<h2 class="page-title">🎬 Sesiones</h2>
+<div class="container-wide">
+
+	<!-- Page header -->
+	<div class="page-header">
+		<div>
+			<p class="eyebrow">Tu colección</p>
+			<h1 class="page-title">Sesiones</h1>
+		</div>
 		{#if !showCreate}
-			<button class="btn-primary" onclick={openCreate}>+ Nueva sesión</button>
+			<button class="btn-primary" onclick={openCreate}>
+				<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+					<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+				</svg>
+				Nueva sesión
+			</button>
 		{/if}
 	</div>
 
+	<!-- Create form -->
 	{#if showCreate}
-		<div class="card create-form">
-			<h3>Crear sesión</h3>
-			<input bind:value={name} placeholder="Nombre de la sesión (ej: Review Abril)" />
+		<div class="glass-strong create-card fade-in">
+			<h2 class="create-title">Nueva sesión</h2>
+
+			<div class="field">
+				<label class="field-label" for="sname">Nombre</label>
+				<input id="sname" bind:value={name} placeholder="Review Mayo 2025…" />
+			</div>
 
 			<div class="config-row">
-				<div class="config-field">
-					<label class="label" for="meme-limit">Límite de memes (vacío = todos)</label>
-					<input id="meme-limit" type="number" min="1" bind:value={memeLimit} placeholder="∞" />
+				<div class="field">
+					<label class="field-label" for="meme-limit">Límite de memes</label>
+					<input id="meme-limit" type="number" min="1" bind:value={memeLimit} placeholder="∞ todos" />
 				</div>
-				<div class="config-field">
-					<fieldset class="mix-fieldset">
-						<legend class="label">Modo de mezcla</legend>
-						<div class="mode-toggle">
-							<button type="button" class="mode-btn" class:selected={mixMode === 'shuffle'} onclick={() => (mixMode = 'shuffle')}>🔀 Mezclar</button>
-							<button type="button" class="mode-btn" class:selected={mixMode === 'batched'} onclick={() => (mixMode = 'batched')}>📦 Por tandas</button>
-						</div>
-					</fieldset>
+				<div class="field">
+					<span class="field-label">Modo de mezcla</span>
+					<div class="mode-toggle">
+						<button type="button" class="mode-btn" class:active={mixMode === 'shuffle'} onclick={() => (mixMode = 'shuffle')}>
+							🔀 Mezclar
+						</button>
+						<button type="button" class="mode-btn" class:active={mixMode === 'batched'} onclick={() => (mixMode = 'batched')}>
+							📦 Por tandas
+						</button>
+					</div>
 				</div>
 			</div>
 
-			<p class="label">Participantes:</p>
-			<div class="user-list">
-				{#each users as u (u.id)}
-					<button
-						class="user-chip"
-						class:selected={selectedUserIds.includes(u.id)}
-						onclick={() => toggleUser(u.id)}
-					>
-						{u.display_name}
-						{#if u.id === authVal.user?.id}(tú){/if}
-					</button>
-				{/each}
+			<div class="field">
+				<span class="field-label">Participantes</span>
+				<div class="user-chips">
+					{#each users as u (u.id)}
+						<button
+							type="button"
+							class="user-chip"
+							class:selected={selectedUserIds.includes(u.id)}
+							onclick={() => toggleUser(u.id)}
+						>
+							{u.display_name}{u.id === authVal.user?.id ? ' (tú)' : ''}
+						</button>
+					{/each}
+				</div>
 			</div>
 
-			{#if error}<p class="error">{error}</p>{/if}
+			{#if error}<p class="form-error">{error}</p>{/if}
 
 			<div class="form-actions">
-				<button class="btn-secondary" onclick={() => (showCreate = false)}>Cancelar</button>
+				<button class="btn-ghost" onclick={() => (showCreate = false)}>Cancelar</button>
 				<button class="btn-primary" onclick={createSession} disabled={loading}>
-					{loading ? 'Creando...' : 'Crear'}
+					{loading ? 'Creando…' : 'Crear sesión'}
 				</button>
 			</div>
 		</div>
 	{/if}
 
-	<div class="session-list">
+	<!-- Session list -->
+	<div class="session-grid">
 		{#each sessions as s (s.id)}
-			<div class="card session-card-wrap" class:new-invite={isNewInvite(s)}>
-				<a href="/sessions/{s.id}" class="session-card">
-					<div class="session-header">
-						<strong>{s.name}</strong>
-						<div class="status-group">
-							{#if isNewInvite(s)}<span class="badge-new">Nueva</span>{/if}
-							<span class="status">{statusLabel(s.status)}</span>
+			{@const si = statusInfo(s.status)}
+			{@const invite = isNewInvite(s)}
+			<div class="session-card glass" class:invite>
+				<a href="/sessions/{s.id}" class="session-link">
+					<!-- Top row: name + status -->
+					<div class="card-top">
+						<div class="card-name-row">
+							{#if invite}
+								<span class="chip chip-coral" style="font-size:0.65rem;padding:0.2rem 0.55rem;">Nueva</span>
+							{/if}
+							<span class="card-name">{s.name}</span>
 						</div>
+						<span class="status-dot-label">
+							<span class="status-dot" style="background:{si.dot};box-shadow:0 0 8px {si.dot}66"></span>
+							{si.label}
+						</span>
 					</div>
-					<div class="session-meta">
+
+					<!-- Progress bar for active sessions -->
+					{#if s.status === 'active' && s.meme_count > 0}
+						<div class="progress-wrap">
+							<div class="progress-bar" style="width:{Math.round((s.current_position ?? 0) / s.meme_count * 100)}%"></div>
+						</div>
+					{/if}
+
+					<!-- Meta -->
+					<div class="card-meta">
 						<span>{s.meme_count} memes</span>
+						<span class="meta-sep">·</span>
 						<span>{s.participants.map((p) => p.display_name).join(', ')}</span>
+						<span class="meta-sep">·</span>
+						<span>{new Date(s.created_at).toLocaleDateString('es-ES', { day:'numeric', month:'short' })}</span>
 					</div>
-					<span class="date">{new Date(s.created_at).toLocaleDateString()}</span>
 				</a>
+
 				{#if s.created_by === authVal.user?.id}
-					<div class="card-actions">
-						<button class="btn-delete-session" onclick={() => deleteSession(s.id)}>🗑️ Borrar</button>
+					<div class="card-footer">
+						<button class="btn-delete" onclick={() => deleteSession(s.id)}>
+							<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+								<polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+							</svg>
+							Borrar
+						</button>
 					</div>
 				{/if}
 			</div>
 		{:else}
-			<p class="empty">No hay sesiones. ¡Crea una para empezar la review!</p>
+			<div class="empty-state glass">
+				<span class="empty-icon">🎬</span>
+				<p class="empty-title">Sin sesiones aún</p>
+				<p class="empty-sub">Crea una sesión para empezar la review con los panas.</p>
+				<button class="btn-primary" onclick={openCreate}>
+					Crear primera sesión
+				</button>
+			</div>
 		{/each}
 	</div>
 </div>
 
 <style>
-	.header {
+	.page-header {
 		display: flex;
 		justify-content: space-between;
-		align-items: center;
-		margin-bottom: 1rem;
+		align-items: flex-end;
+		margin-bottom: 1.5rem;
+		padding-top: 0.5rem;
 	}
-	.create-form {
+	.page-title {
+		font-size: 1.9rem;
+		font-weight: 800;
+		letter-spacing: -0.025em;
+		line-height: 1;
+		margin-top: 0.3rem;
+	}
+
+	/* Create form */
+	.create-card {
+		padding: 1.75rem;
 		margin-bottom: 1.5rem;
 		display: flex;
 		flex-direction: column;
-		gap: 0.75rem;
+		gap: 1rem;
 	}
-	.label {
-		font-size: 0.85rem;
-		color: var(--text-muted);
-		margin-top: 0.25rem;
+	.create-title {
+		font-size: 1.2rem;
+		font-weight: 700;
+		letter-spacing: -0.015em;
 	}
-	.user-list {
+	.field {
 		display: flex;
-		flex-wrap: wrap;
-		gap: 0.5rem;
+		flex-direction: column;
+		gap: 0.4rem;
 	}
+	.field-label {
+		font-size: 0.72rem;
+		font-weight: 600;
+		color: var(--text-muted);
+		text-transform: uppercase;
+		letter-spacing: 0.1em;
+		font-family: var(--font-mono);
+	}
+	.config-row {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: 1rem;
+	}
+	.mode-toggle { display: flex; gap: 0.4rem; }
+	.mode-btn {
+		flex: 1;
+		padding: 0.5rem;
+		border-radius: var(--r-md);
+		font-size: 0.82rem;
+		background: var(--glass-bg-input);
+		border: 1px solid var(--glass-border);
+		color: var(--text-soft);
+	}
+	.mode-btn.active {
+		background: rgba(255, 84, 112, 0.15);
+		border-color: rgba(255, 84, 112, 0.4);
+		color: var(--coral-bright);
+	}
+	.user-chips { display: flex; flex-wrap: wrap; gap: 0.5rem; }
 	.user-chip {
-		padding: 0.4rem 0.8rem;
-		border-radius: 20px;
-		font-size: 0.85rem;
-		background: var(--bg-input);
-		color: var(--text);
-		border: 2px solid transparent;
+		padding: 0.4rem 0.85rem;
+		border-radius: 999px;
+		font-size: 0.82rem;
+		background: var(--glass-bg-input);
+		border: 1px solid var(--glass-border);
+		color: var(--text-soft);
 	}
 	.user-chip.selected {
-		border-color: var(--accent);
-		background: rgba(233, 69, 96, 0.2);
+		background: rgba(255, 84, 112, 0.15);
+		border-color: rgba(255, 84, 112, 0.4);
+		color: var(--coral-bright);
 	}
+	.form-error { color: var(--coral-bright); font-size: 0.85rem; }
 	.form-actions {
 		display: flex;
 		gap: 0.5rem;
 		justify-content: flex-end;
+		padding-top: 0.25rem;
+		border-top: 1px solid rgba(255,255,255,0.06);
 	}
-	.error {
-		color: var(--accent);
-		font-size: 0.85rem;
-	}
-	.session-list {
+
+	/* Session grid */
+	.session-grid {
 		display: flex;
 		flex-direction: column;
 		gap: 0.75rem;
 	}
+
 	.session-card {
-		display: block;
-		color: var(--text);
-		padding: 1rem;
-	}
-	.session-card:hover strong {
-		color: var(--accent);
-		transition: color 0.15s;
-	}
-	.session-header {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		margin-bottom: 0.5rem;
-	}
-	.status {
-		font-size: 0.8rem;
-	}
-	.session-meta {
-		display: flex;
-		justify-content: space-between;
-		font-size: 0.85rem;
-		color: var(--text-muted);
-		margin-bottom: 0.25rem;
-	}
-	.date {
-		font-size: 0.75rem;
-		color: var(--text-muted);
-	}
-	.empty {
-		text-align: center;
-		color: var(--text-muted);
-		padding: 2rem 0;
-	}
-	.config-row {
-		display: flex;
-		gap: 1rem;
-	}
-	.config-field {
-		flex: 1;
-		display: flex;
-		flex-direction: column;
-		gap: 0.3rem;
-	}
-	.mix-fieldset {
-		border: none;
-		margin: 0;
-		padding: 0;
-		min-width: 0;
-		display: flex;
-		flex-direction: column;
-		gap: 0.3rem;
-	}
-	.config-field input {
-		width: 100%;
-	}
-	.mode-toggle {
-		display: flex;
-		gap: 0.4rem;
-	}
-	.mode-btn {
-		flex: 1;
-		padding: 0.4rem 0.5rem;
-		border-radius: 8px;
-		font-size: 0.8rem;
-		background: var(--bg-input);
-		color: var(--text);
-		border: 2px solid transparent;
-	}
-	.mode-btn.selected {
-		border-color: var(--accent);
-		background: rgba(233, 69, 96, 0.2);
-	}
-	.session-card-wrap {
-		padding: 0;
 		overflow: hidden;
+		border-radius: var(--r-lg);
+		transition: transform 0.15s, box-shadow 0.15s;
 	}
-	.card-actions {
+	.session-card:hover { transform: translateY(-1px); }
+	.session-card.invite {
+		border-color: rgba(255, 84, 112, 0.4) !important;
+		box-shadow: inset 0 1px 0 var(--glass-highlight), 0 0 0 1px rgba(255,84,112,0.2), var(--shadow-md);
+	}
+
+	.session-link {
+		display: block;
+		padding: 1.1rem 1.25rem;
+		text-decoration: none;
+		color: var(--text);
+	}
+
+	.card-top {
+		display: flex;
+		justify-content: space-between;
+		align-items: flex-start;
+		gap: 0.75rem;
+		margin-bottom: 0.6rem;
+	}
+	.card-name-row {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		flex-wrap: wrap;
+	}
+	.card-name {
+		font-weight: 700;
+		font-size: 1rem;
+		letter-spacing: -0.01em;
+	}
+	.session-link:hover .card-name { color: var(--coral-bright); }
+
+	.status-dot-label {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.4rem;
+		font-size: 0.78rem;
+		color: var(--text-muted);
+		font-weight: 500;
+		flex-shrink: 0;
+	}
+	.status-dot {
+		width: 7px;
+		height: 7px;
+		border-radius: 50%;
+		flex-shrink: 0;
+	}
+
+	.progress-wrap {
+		height: 3px;
+		background: rgba(255,255,255,0.07);
+		border-radius: 99px;
+		overflow: hidden;
+		margin-bottom: 0.6rem;
+	}
+	.progress-bar {
+		height: 100%;
+		background: linear-gradient(90deg, var(--coral-bright), var(--violet));
+		border-radius: 99px;
+		transition: width 0.4s ease;
+	}
+
+	.card-meta {
+		font-size: 0.8rem;
+		color: var(--text-muted);
+		display: flex;
+		align-items: center;
+		gap: 0.4rem;
+		flex-wrap: wrap;
+	}
+	.meta-sep { opacity: 0.4; }
+
+	.card-footer {
 		border-top: 1px solid rgba(255, 255, 255, 0.06);
-		padding: 0.5rem 1rem;
+		padding: 0.5rem 1.25rem;
 		display: flex;
 		justify-content: flex-end;
 	}
-	.btn-delete-session {
+	.btn-delete {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.35rem;
 		background: none;
 		border: none;
-		font-size: 0.8rem;
+		font-size: 0.78rem;
 		color: var(--text-muted);
 		cursor: pointer;
 		padding: 0.25rem 0.5rem;
-		border-radius: 6px;
+		border-radius: 8px;
 		transition: color 0.15s, background 0.15s;
 	}
-	.btn-delete-session:hover {
-		color: var(--accent);
-		background: rgba(233, 69, 96, 0.1);
-	}
-	.new-invite {
-		border: 1px solid var(--accent) !important;
-	}
-	.status-group {
+	.btn-delete:hover { color: var(--coral-bright); background: rgba(255,84,112,0.08); }
+
+	/* Empty state */
+	.empty-state {
 		display: flex;
+		flex-direction: column;
 		align-items: center;
-		gap: 0.4rem;
+		gap: 0.5rem;
+		padding: 3rem 2rem;
+		text-align: center;
 	}
-	.badge-new {
-		background: var(--accent);
-		color: #fff;
-		font-size: 0.7rem;
-		font-weight: 700;
-		padding: 0.1rem 0.5rem;
-		border-radius: 10px;
-		text-transform: uppercase;
-		letter-spacing: 0.03em;
-	}
+	.empty-icon { font-size: 2.5rem; margin-bottom: 0.25rem; }
+	.empty-title { font-size: 1.1rem; font-weight: 700; }
+	.empty-sub { color: var(--text-muted); font-size: 0.9rem; margin-bottom: 0.5rem; }
 </style>
