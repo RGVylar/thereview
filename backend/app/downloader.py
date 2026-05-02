@@ -124,9 +124,9 @@ def download_and_update(session_id: int, meme_id: int, url: str) -> None:
                 import json
                 cache.dl_metadata = json.dumps(meta, ensure_ascii=True)
         else:
-            # No file produced - might be a slideshow or failed download
-            # If extraction succeeded but produced no file, likely a slideshow
-            if meta or (ie and _is_slideshow(ie)):
+            # No file produced — if we got metadata the extraction ran but yielded
+            # no downloadable video (e.g. image/slideshow post); otherwise it failed.
+            if meta:
                 cache.status = "slideshow"
                 cache.error = None
                 print(f"[DL] Detected slideshow (no output file) [session={session_id} meme={meme_id}]")
@@ -137,6 +137,7 @@ def download_and_update(session_id: int, meme_id: int, url: str) -> None:
 
         # Update meme thumbnail if we extracted one
         if meta and meta.get("thumbnail"):
+            from app.models import Meme
             meme = db.query(Meme).filter_by(id=meme_id).first()
             if meme and not meme.thumbnail_url:
                 meme.thumbnail_url = meta["thumbnail"]

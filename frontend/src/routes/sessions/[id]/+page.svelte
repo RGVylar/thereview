@@ -1109,7 +1109,11 @@
 							{/if}
 						</div>
 						{#if dlFailed > 0}
-							<p class="dl-progress-sub"><span class="dl-failed">{dlFailed} no disponibles</span></p>
+							<p class="dl-progress-sub">
+								<span class="dl-failed" title="Vídeos eliminados, privados o no compatibles con la descarga automática. Se mostrarán como iframe al llegar a ellos.">
+									⚠️ {dlFailed} eliminados o privados
+								</span>
+							</p>
 						{/if}
 					</div>
 				{:else if dlSettled || dlTotal === 0}
