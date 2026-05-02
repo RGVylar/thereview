@@ -17,6 +17,7 @@
 	let currentIndex = $state(0);
 	let error = $state('');
 	let view = $state('presentation'); // 'presentation' | 'ranking'
+	let resultTab = $state('top'); // 'top' | 'bottom' | 'players'
 
 	// Cache for Twitter oEmbed HTML keyed by meme_id
 	let twitterEmbeds = $state({});
@@ -1484,38 +1485,307 @@
 
 		<!-- RANKING VIEW -->
 		{#if view === 'ranking'}
-			{@const maxScore = ranking[0]?.total_score || 1}
 			{@const totalMemes = session.session_memes.length}
 			{@const typeIcon = (t) => ({tiktok:'🎵',twitter:'🐦',youtube:'▶️',instagram:'📸',image:'🖼️',link:'🔗'})[t] ?? '🔗'}
-			<div class="ranking-view">
-				<div class="ranking-header">
-					<h3>🏆 Resultados</h3>
-					{#if session.status === 'active'}
-						<div class="ranking-actions">
-							<button class="btn-secondary" onclick={() => (view = 'presentation')}>
-								← Volver a memes
+			{@const typeAccent = (t) => ({tiktok:'#25f4ee',twitter:'#1da1f2',youtube:'#ff0000',instagram:'#f09433',image:'#9b6bff',link:'#5ee3d2'})[t] ?? '#9b6bff'}
+			{@const avgSession = votes.length ? (votes.reduce((s,v) => s + v.value, 0) / votes.length).toFixed(1) : '—'}
+			{@const superFavsCount = (() => {
+				const n = session.participants.length;
+				return session.session_memes.filter(sm => {
+					const mv = votes.filter(v => v.meme_id === sm.meme.id);
+					return mv.length >= n && mv.every(v => v.value === totalMemes);
+				}).length;
+			})()}
+
+			<div class="rv-wrap">
+
+				<!-- ── HERO ── -->
+				<div class="rv-hero glass-strong">
+					<div style="position:absolute;top:-50px;right:-20px;font-size:9rem;opacity:0.06;font-weight:800;pointer-events:none">🏆</div>
+
+					<div class="rv-hero-top">
+						{#if session.status === 'active'}
+							<button class="btn-ghost rv-back" onclick={() => (view = 'presentation')}>
+								<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+								Volver
 							</button>
-							<button class="btn-primary" onclick={finishSession}>
-								✅ Finalizar sesión
-							</button>
+						{/if}
+						<span class="rv-eyebrow">Sesión {session.status === 'finished' ? 'terminada' : 'en curso'}</span>
+						<span class="chip chip-violet" style="font-size:0.65rem">{session.status === 'finished' ? '✓ FINISHED' : '▶ LIVE'}</span>
+						{#if session.status === 'active'}
+							<button class="btn-primary rv-finish" onclick={finishSession}>✅ Finalizar</button>
+						{/if}
+					</div>
+
+					<h1 class="rv-session-name">{session.name}</h1>
+
+					<div class="rv-stats">
+						<div class="rv-stat">
+							<div class="rv-stat-num">{ranking.length}</div>
+							<div class="rv-stat-label">memes votados</div>
 						</div>
-					{/if}
+						<div class="rv-stat">
+							<div class="rv-stat-num rv-stat-accent">{avgSession}</div>
+							<div class="rv-stat-label">nota media</div>
+						</div>
+						<div class="rv-stat">
+							<div class="rv-stat-num">{superFavsCount}</div>
+							<div class="rv-stat-label">super favs ⭐</div>
+						</div>
+						<div class="rv-stat">
+							<div class="rv-stat-num">{session.participants.length}</div>
+							<div class="rv-stat-label">participantes</div>
+						</div>
+						<div>
+							<div class="rv-eyebrow" style="font-size:0.6rem;margin-bottom:0.4rem">Crew</div>
+							<div style="display:inline-flex">
+								{#each session.participants as p, i}
+									<span class="rv-avatar" style="margin-left:{i===0?0:-8}px;z-index:{session.participants.length-i}" title={p.display_name}>
+										{p.display_name.slice(0,2).toUpperCase()}
+									</span>
+								{/each}
+							</div>
+						</div>
+					</div>
 				</div>
 
-				<!-- Emoji reaction summary -->
-				{#if Object.keys(emojiCounts).length > 0}
-					<div class="emoji-summary">
-						<span class="emoji-summary-label">Reacciones:</span>
-						{#each Object.entries(emojiCounts).sort((a, b) => b[1] - a[1]).slice(0, 6) as [emoji, count]}
-							<span class="emoji-summary-item">{emoji}<strong>{count}</strong></span>
-						{/each}
-					</div>
-				{/if}
-
 				{#if !ranking.length}
-					<p class="empty">No hay votos todavía</p>
+					<div class="glass rv-empty">
+						<p>No hay votos todavía</p>
+					</div>
 				{:else}
-					<!-- ── Global vote density heatmap ── -->
+					{@const winner = ranking[0]}
+					{@const winnerEmbed = detectEmbed(winner.url)}
+					{@const winnerAvg = winner.vote_count ? winner.total_score / winner.vote_count : 0}
+					{@const winnerPreview = rankingPreviewSrc(winner)}
+
+					<!-- ── WINNER SPOTLIGHT ── -->
+					<div class="rv-winner glass-strong">
+						<!-- Thumbnail -->
+						<a href={winner.url} target="_blank" rel="noopener noreferrer" class="rv-winner-thumb" style="border-color:{typeAccent(winnerEmbed.type)}33">
+							{#if winnerPreview}
+								<img src={winnerPreview} alt="" loading="lazy" referrerpolicy="no-referrer" />
+							{:else}
+								<span class="rv-winner-icon" style="color:{typeAccent(winnerEmbed.type)}">{typeIcon(winnerEmbed.type)}</span>
+							{/if}
+							<span class="rv-winner-platform" style="background:{typeAccent(winnerEmbed.type)}22;border-color:{typeAccent(winnerEmbed.type)}55;color:{typeAccent(winnerEmbed.type)}">
+								{typeIcon(winnerEmbed.type)}
+							</span>
+						</a>
+
+						<!-- Info -->
+						<div class="rv-winner-info">
+							<div class="rv-winner-badges">
+								<span style="font-size:1.3rem">🥇</span>
+								<span class="rv-eyebrow" style="color:var(--gold)">Ganador</span>
+							</div>
+							<p class="rv-winner-url">{winner.url.replace(/^https?:\/\/(www\.)?/, '').slice(0, 55)}{winner.url.length > 60 ? '…' : ''}</p>
+							<div class="rv-winner-meta">
+								<span style="color:{typeAccent(winnerEmbed.type)};font-weight:600">{winnerEmbed.type}</span>
+								<span class="rv-dot">·</span>
+								<span>añadido por <strong>{winner.submitted_by}</strong></span>
+							</div>
+							<!-- Per-user votes -->
+							<div class="rv-winner-votes">
+								{#each session.participants as p}
+									{@const uv = votes.find(v => v.meme_id === winner.meme_id && v.user_id === p.id)}
+									{@const high = uv && uv.value >= Math.round(totalMemes * 0.8)}
+									{@const low  = uv && uv.value <= Math.round(totalMemes * 0.3)}
+									<div class="rv-vote-chip"
+										class:rv-vote-high={high}
+										class:rv-vote-low={low}
+										title="{p.display_name}: {uv ? uv.value + '/' + totalMemes : 'sin votar'}"
+									>
+										<span class="rv-vote-initial">{p.display_name.slice(0,1).toUpperCase()}</span>
+										<strong class="rv-vote-val">{uv ? uv.value : '—'}</strong>
+									</div>
+								{/each}
+							</div>
+						</div>
+
+						<!-- Big score -->
+						<div class="rv-winner-score">
+							<div class="rv-big-score">{winnerAvg.toFixed(1)}</div>
+							<div class="rv-eyebrow" style="font-size:0.6rem;margin-top:0.3rem">nota media</div>
+						</div>
+					</div>
+
+					<!-- ── TABS ── -->
+					<div class="rv-tabs">
+						<button class="rv-tab" class:active={resultTab === 'top'}     onclick={() => resultTab = 'top'}>🏆 Top 5</button>
+						<button class="rv-tab" class:active={resultTab === 'bottom'}  onclick={() => resultTab = 'bottom'}>💀 Bottom 3</button>
+						<button class="rv-tab" class:active={resultTab === 'players'} onclick={() => resultTab = 'players'}>👥 Por jugador</button>
+					</div>
+
+					<!-- ── TOP 5 ── -->
+					{#if resultTab === 'top'}
+						<div class="rv-rank-list">
+							{#each ranking.slice(0, 5) as entry, i (entry.meme_id)}
+								{@const embed = detectEmbed(entry.url)}
+								{@const avg = entry.vote_count ? entry.total_score / entry.vote_count : 0}
+								{@const medals = {0:'🥇',1:'🥈',2:'🥉'}}
+								{@const isPodium = i < 3}
+								{@const preview = rankingPreviewSrc(entry)}
+								<div class="rv-rank-row glass" class:rv-rank-podium={isPodium}>
+									<!-- Rank -->
+									<div class="rv-rank-pos">
+										{#if medals[i]}<span style="font-size:1.5rem">{medals[i]}</span>
+										{:else}<span class="rv-rank-num">#{i+1}</span>{/if}
+									</div>
+
+									<!-- Platform thumb -->
+									<a href={entry.url} target="_blank" rel="noopener noreferrer" class="rv-rank-thumb" style="background:linear-gradient(135deg,{typeAccent(embed.type)}33,{typeAccent(embed.type)}11);border-color:{typeAccent(embed.type)}22">
+										{#if preview}
+											<img src={preview} alt="" loading="lazy" referrerpolicy="no-referrer" />
+										{:else}
+											<span style="color:{typeAccent(embed.type)};font-size:1.3rem">{typeIcon(embed.type)}</span>
+										{/if}
+									</a>
+
+									<!-- Info -->
+									<div class="rv-rank-info">
+										<div class="rv-rank-url">{entry.url.replace(/^https?:\/\/(www\.)?/, '').slice(0, 48)}{entry.url.length > 53 ? '…' : ''}</div>
+										<div class="rv-rank-sub">
+											<span style="color:{typeAccent(embed.type)};font-size:0.72rem;font-weight:600">{embed.type}</span>
+											<span class="rv-dot">·</span>
+											<span>por {entry.submitted_by}</span>
+										</div>
+									</div>
+
+									<!-- Per-user votes -->
+									<div class="rv-rank-votes">
+										{#each session.participants as p}
+											{@const uv = votes.find(v => v.meme_id === entry.meme_id && v.user_id === p.id)}
+											{@const high = uv && uv.value >= Math.round(totalMemes * 0.8)}
+											{@const low  = uv && uv.value <= Math.round(totalMemes * 0.3)}
+											<div class="rv-vote-chip"
+												class:rv-vote-high={high}
+												class:rv-vote-low={low}
+												title="{p.display_name}: {uv ? uv.value + '/' + totalMemes : 'sin votar'}"
+											>
+												<span class="rv-vote-initial">{p.display_name.slice(0,1).toUpperCase()}</span>
+												<strong class="rv-vote-val">{uv ? uv.value : '—'}</strong>
+											</div>
+										{/each}
+									</div>
+
+									<!-- Avg score -->
+									<div class="rv-rank-avg">
+										<div class="rv-rank-avg-num" style="color:var(--gold)">{avg.toFixed(1)}</div>
+										<div class="rv-eyebrow" style="font-size:0.55rem">nota</div>
+									</div>
+								</div>
+							{/each}
+						</div>
+					{/if}
+
+					<!-- ── BOTTOM 3 ── -->
+					{#if resultTab === 'bottom'}
+						<div class="rv-rank-list">
+							{#each [...ranking].reverse().slice(0, 3) as entry, i (entry.meme_id)}
+								{@const embed = detectEmbed(entry.url)}
+								{@const avg = entry.vote_count ? entry.total_score / entry.vote_count : 0}
+								{@const realIdx = ranking.findIndex(r => r.meme_id === entry.meme_id)}
+								{@const preview = rankingPreviewSrc(entry)}
+								{@const isDead = i === 0 && realIdx === ranking.length - 1}
+								<div class="rv-rank-row glass rv-rank-bottom">
+									<div class="rv-rank-pos">
+										{#if isDead}<span style="font-size:1.5rem">💀</span>
+										{:else}<span class="rv-rank-num" style="color:var(--coral-bright)">#{realIdx+1}</span>{/if}
+									</div>
+
+									<a href={entry.url} target="_blank" rel="noopener noreferrer" class="rv-rank-thumb" style="background:rgba(255,84,112,0.08);border-color:rgba(255,84,112,0.15)">
+										{#if preview}
+											<img src={preview} alt="" loading="lazy" referrerpolicy="no-referrer" />
+										{:else}
+											<span style="color:var(--coral-bright);font-size:1.3rem">{typeIcon(embed.type)}</span>
+										{/if}
+									</a>
+
+									<div class="rv-rank-info">
+										<div class="rv-rank-url">{entry.url.replace(/^https?:\/\/(www\.)?/, '').slice(0, 48)}{entry.url.length > 53 ? '…' : ''}</div>
+										<div class="rv-rank-sub">
+											<span style="color:{typeAccent(embed.type)};font-size:0.72rem;font-weight:600">{embed.type}</span>
+											<span class="rv-dot">·</span>
+											<span>por {entry.submitted_by}</span>
+										</div>
+									</div>
+
+									<div class="rv-rank-votes">
+										{#each session.participants as p}
+											{@const uv = votes.find(v => v.meme_id === entry.meme_id && v.user_id === p.id)}
+											{@const high = uv && uv.value >= Math.round(totalMemes * 0.8)}
+											{@const low  = uv && uv.value <= Math.round(totalMemes * 0.3)}
+											<div class="rv-vote-chip" class:rv-vote-high={high} class:rv-vote-low={low}
+												title="{p.display_name}: {uv ? uv.value + '/' + totalMemes : 'sin votar'}">
+												<span class="rv-vote-initial">{p.display_name.slice(0,1).toUpperCase()}</span>
+												<strong class="rv-vote-val">{uv ? uv.value : '—'}</strong>
+											</div>
+										{/each}
+									</div>
+
+									<div class="rv-rank-avg">
+										<div class="rv-rank-avg-num" style="color:var(--coral-bright)">{avg.toFixed(1)}</div>
+										<div class="rv-eyebrow" style="font-size:0.55rem">nota</div>
+									</div>
+								</div>
+							{/each}
+						</div>
+					{/if}
+
+					<!-- ── BY PLAYER ── -->
+					{#if resultTab === 'players'}
+						<div class="rv-players-grid">
+							{#each session.participants as p}
+								{@const myVotes = votes.filter(v => v.user_id === p.id)}
+								{@const avgGiven = myVotes.length ? (myVotes.reduce((s,v) => s + v.value, 0) / myVotes.length).toFixed(1) : '—'}
+								{@const submitted = session.session_memes.filter(sm => sm.meme.user_id === p.id).length}
+								{@const top5ids = ranking.slice(0, 5).map(r => r.meme_id)}
+								{@const bot3ids = [...ranking].reverse().slice(0, 3).map(r => r.meme_id)}
+								{@const inTop = session.session_memes.filter(sm => sm.meme.user_id === p.id && top5ids.includes(sm.meme.id)).length}
+								{@const inBot = session.session_memes.filter(sm => sm.meme.user_id === p.id && bot3ids.includes(sm.meme.id)).length}
+								{@const allGiven = votes.filter(v => v.user_id === p.id).map(v => v.value)}
+								{@const isHarshest = allGiven.length && session.participants.every(pp => {
+									const ov = votes.filter(v => v.user_id === pp.id).map(v => v.value);
+									return !ov.length || (allGiven.reduce((s,x)=>s+x,0)/allGiven.length) <= (ov.reduce((s,x)=>s+x,0)/ov.length);
+								})}
+								{@const isKindest = allGiven.length && session.participants.every(pp => {
+									const ov = votes.filter(v => v.user_id === pp.id).map(v => v.value);
+									return !ov.length || (allGiven.reduce((s,x)=>s+x,0)/allGiven.length) >= (ov.reduce((s,x)=>s+x,0)/ov.length);
+								})}
+								<div class="rv-player-card glass">
+									<div class="rv-player-header">
+										<span class="rv-player-avatar">{p.display_name.slice(0,2).toUpperCase()}</span>
+										<div>
+											<div class="rv-player-name">{p.display_name}</div>
+										</div>
+										{#if isHarshest}<span class="chip chip-coral" style="font-size:0.65rem">😈 más duro</span>{/if}
+										{#if isKindest}<span class="chip chip-teal" style="font-size:0.65rem">😇 más blando</span>{/if}
+									</div>
+									<div class="rv-player-stats">
+										<div class="rv-mini-stat">
+											<div class="rv-eyebrow" style="font-size:0.58rem">Memes aportados</div>
+											<div class="rv-mini-num">{submitted}</div>
+										</div>
+										<div class="rv-mini-stat">
+											<div class="rv-eyebrow" style="font-size:0.58rem">Nota media dada</div>
+											<div class="rv-mini-num" style="font-family:var(--font-mono)">{avgGiven}</div>
+										</div>
+										<div class="rv-mini-stat">
+											<div class="rv-eyebrow" style="font-size:0.58rem">En top 5</div>
+											<div class="rv-mini-num" style="color:var(--gold)">{inTop}</div>
+										</div>
+										<div class="rv-mini-stat">
+											<div class="rv-eyebrow" style="font-size:0.58rem">En bottom 3</div>
+											<div class="rv-mini-num" style="color:var(--coral-bright)">{inBot}</div>
+										</div>
+									</div>
+								</div>
+							{/each}
+						</div>
+					{/if}
+
+					<!-- ── HEATMAP (preserved) ── -->
 					{@const _buckets = (() => {
 						const arr = new Array(totalMemes + 1).fill(0);
 						votes.forEach(v => { if (v.value >= 0 && v.value <= totalMemes) arr[v.value]++; });
@@ -1538,149 +1808,19 @@
 								></div>
 							{/each}
 						</div>
+						<!-- Emoji reactions -->
+						{#if Object.keys(emojiCounts).length > 0}
+							<div class="rv-reactions">
+								<span class="rv-eyebrow" style="font-size:0.6rem">Reacciones</span>
+								{#each Object.entries(emojiCounts).sort((a, b) => b[1] - a[1]) as [emoji, count]}
+									<span class="rv-reaction-item">{emoji}<strong>{count}</strong></span>
+								{/each}
+							</div>
+						{/if}
 					</div>
 
-					<!-- Podium top 3 -->
-					{#if ranking.length >= 3}
-						<div class="podium">
-							<!-- 2nd -->
-							<div class="podium-entry podium-2">
-								<a href={ranking[1].url} target="_blank" rel="noopener noreferrer" class="podium-media">
-									{#if rankingPreviewSrc(ranking[1])}
-										<img src={rankingPreviewSrc(ranking[1])} alt="" class="podium-img" loading="lazy" referrerpolicy="no-referrer" />
-									{:else}
-										<span class="podium-icon">{typeIcon(detectEmbed(ranking[1].url).type)}</span>
-									{/if}
-								</a>
-								<div class="podium-medal">🥈</div>
-								<div class="podium-score">{ranking[1].vote_count ? Math.round(ranking[1].total_score / ranking[1].vote_count / totalMemes * 100) : 0}%</div>
-								<div class="podium-block podium-block-2"></div>
-							</div>
-							<!-- 1st -->
-							<div class="podium-entry podium-1">
-								<a href={ranking[0].url} target="_blank" rel="noopener noreferrer" class="podium-media">
-									{#if rankingPreviewSrc(ranking[0])}
-										<img src={rankingPreviewSrc(ranking[0])} alt="" class="podium-img" loading="lazy" referrerpolicy="no-referrer" />
-									{:else}
-										<span class="podium-icon">{typeIcon(detectEmbed(ranking[0].url).type)}</span>
-									{/if}
-								</a>
-								<div class="podium-medal">🥇</div>
-								<div class="podium-score">{ranking[0].vote_count ? Math.round(ranking[0].total_score / ranking[0].vote_count / totalMemes * 100) : 0}%</div>
-								<div class="podium-block podium-block-1"></div>
-							</div>
-							<!-- 3rd -->
-							<div class="podium-entry podium-3">
-								<a href={ranking[2].url} target="_blank" rel="noopener noreferrer" class="podium-media">
-									{#if rankingPreviewSrc(ranking[2])}
-										<img src={rankingPreviewSrc(ranking[2])} alt="" class="podium-img" loading="lazy" referrerpolicy="no-referrer" />
-									{:else}
-										<span class="podium-icon">{typeIcon(detectEmbed(ranking[2].url).type)}</span>
-									{/if}
-								</a>
-								<div class="podium-medal">🥉</div>
-								<div class="podium-score">{ranking[2].vote_count ? Math.round(ranking[2].total_score / ranking[2].vote_count / totalMemes * 100) : 0}%</div>
-								<div class="podium-block podium-block-3"></div>
-							</div>
-						</div>
-					{/if}
-
-					<!-- TOP BASED + CRINGE -->
-					{@const topEntries = ranking.slice(0, 5)}
-					{@const cringe = ranking.length > 5 ? ranking.slice(-5).filter(b => !topEntries.find(t => t.meme_id === b.meme_id)) : []}
-					{@const midCount = Math.max(0, ranking.length - topEntries.length - cringe.length)}
-
-					{#if topEntries.length > 0}
-						<div class="ranking-section-label ranking-label-top">🏆 TOP BASED</div>
-						<div class="ranking-list">
-							{#each topEntries as entry, i (entry.meme_id)}
-								{@const embed = detectEmbed(entry.url)}
-								{@const avg = entry.vote_count ? entry.total_score / entry.vote_count : 0}
-								{@const pct = Math.round(avg / totalMemes * 100)}
-								{@const barPct = Math.round(entry.total_score / maxScore * 100)}
-								{@const previewSrc = rankingPreviewSrc(entry)}
-								<div class="ranking-row top3">
-									<div class="ranking-pos">
-										{i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i+1}`}
-									</div>
-									<a href={entry.url} target="_blank" rel="noopener noreferrer" class="ranking-type-icon" title={entry.url}>
-										{#if previewSrc}
-											<img src={previewSrc} alt="" class="ranking-thumb" loading="lazy" referrerpolicy="no-referrer" />
-										{:else}
-											{typeIcon(embed.type)}
-										{/if}
-									</a>
-									<div class="ranking-bar-wrap">
-										<div class="ranking-bar-meta">
-											<span class="ranking-submitter">por {entry.submitted_by}</span>
-											<span class="ranking-pct">{pct}%</span>
-										</div>
-										<div class="ranking-bar-track">
-											<div class="ranking-bar-fill" style="width:{barPct}%"></div>
-										</div>
-										<div class="ranking-user-votes">
-											{#each session.participants as p}
-												{@const uv = votes.find(v => v.meme_id === entry.meme_id && v.user_id === p.id)}
-												<span class="uv-chip" class:uv-mine={p.id === authVal.user?.id} title="{p.display_name}: {uv ? uv.value + '/' + totalMemes : 'sin votar'}">
-													{p.display_name.slice(0,1).toUpperCase()}
-													{#if uv}<strong>{uv.value}</strong>{:else}—{/if}
-												</span>
-											{/each}
-										</div>
-									</div>
-								</div>
-							{/each}
-						</div>
-					{/if}
-
-					{#if cringe.length > 0}
-						{#if midCount > 0}
-							<div class="ranking-divider"><span>· · · {midCount} sin mostrar · · ·</span></div>
-						{/if}
-						<div class="ranking-section-label ranking-label-cringe">💩 CRINGE</div>
-						<div class="ranking-list">
-							{#each cringe as entry (entry.meme_id)}
-								{@const realIndex = ranking.findIndex(r => r.meme_id === entry.meme_id)}
-								{@const embed = detectEmbed(entry.url)}
-								{@const avg = entry.vote_count ? entry.total_score / entry.vote_count : 0}
-								{@const pct = Math.round(avg / totalMemes * 100)}
-								{@const barPct = Math.round(entry.total_score / maxScore * 100)}
-								{@const previewSrc = rankingPreviewSrc(entry)}
-								<div class="ranking-row ranking-row-bottom">
-									<div class="ranking-pos ranking-pos-bottom">
-										{realIndex === ranking.length - 1 ? '💀' : `#${realIndex + 1}`}
-									</div>
-									<a href={entry.url} target="_blank" rel="noopener noreferrer" class="ranking-type-icon" title={entry.url}>
-										{#if previewSrc}
-											<img src={previewSrc} alt="" class="ranking-thumb" loading="lazy" referrerpolicy="no-referrer" />
-										{:else}
-											{typeIcon(embed.type)}
-										{/if}
-									</a>
-									<div class="ranking-bar-wrap">
-										<div class="ranking-bar-meta">
-											<span class="ranking-submitter">por {entry.submitted_by}</span>
-											<span class="ranking-pct">{pct}%</span>
-										</div>
-										<div class="ranking-bar-track">
-											<div class="ranking-bar-fill ranking-bar-fill-bottom" style="width:{barPct}%"></div>
-										</div>
-										<div class="ranking-user-votes">
-											{#each session.participants as p}
-												{@const uv = votes.find(v => v.meme_id === entry.meme_id && v.user_id === p.id)}
-												<span class="uv-chip" class:uv-mine={p.id === authVal.user?.id} title="{p.display_name}: {uv ? uv.value + '/' + totalMemes : 'sin votar'}">
-													{p.display_name.slice(0,1).toUpperCase()}
-													{#if uv}<strong>{uv.value}</strong>{:else}—{/if}
-												</span>
-											{/each}
-										</div>
-									</div>
-								</div>
-							{/each}
-						</div>
-					{/if}
 				{/if}
-			</div>
+			</div><!-- /rv-wrap -->
 		{/if}
 	{:else}
 		<p>Cargando...</p>
@@ -2994,5 +3134,433 @@
 		border-radius: 6px;
 		background: rgba(255, 255, 255, 0.06);
 		animation: fadeIn 0.3s;
+	}
+
+	/* ══════════════════════════════════════════
+	   RESULTS VIEW  (.rv-*)
+	══════════════════════════════════════════ */
+	.rv-wrap {
+		display: flex;
+		flex-direction: column;
+		gap: 1rem;
+	}
+
+	/* ── Hero ── */
+	.rv-hero {
+		position: relative;
+		overflow: hidden;
+		padding: 1.5rem 1.75rem;
+		border-radius: var(--r-lg);
+		display: flex;
+		flex-direction: column;
+		gap: 1rem;
+	}
+	.rv-hero-top {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+		flex-wrap: wrap;
+	}
+	.rv-back { flex-shrink: 0; }
+	.rv-finish { margin-left: auto; }
+	.rv-eyebrow {
+		font-size: 0.68rem;
+		font-weight: 700;
+		letter-spacing: 0.12em;
+		text-transform: uppercase;
+		color: var(--text-muted);
+		font-family: var(--font-mono);
+	}
+	.rv-session-name {
+		font-size: clamp(1.4rem, 4vw, 2.2rem);
+		font-weight: 800;
+		letter-spacing: -0.03em;
+		margin: 0;
+		line-height: 1.1;
+	}
+	.rv-stats {
+		display: flex;
+		align-items: flex-end;
+		gap: 1.5rem;
+		flex-wrap: wrap;
+	}
+	.rv-stat {
+		display: flex;
+		flex-direction: column;
+		gap: 0.15rem;
+	}
+	.rv-stat-num {
+		font-size: 1.8rem;
+		font-weight: 800;
+		letter-spacing: -0.04em;
+		font-family: var(--font-mono);
+		line-height: 1;
+	}
+	.rv-stat-accent { color: var(--teal); }
+	.rv-stat-label {
+		font-size: 0.7rem;
+		color: var(--text-muted);
+		font-weight: 500;
+	}
+	.rv-avatar {
+		width: 32px;
+		height: 32px;
+		border-radius: 50%;
+		background: linear-gradient(135deg, var(--coral), var(--violet));
+		border: 2px solid var(--glass-bg-strong);
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		font-size: 0.62rem;
+		font-weight: 800;
+		color: #fff;
+		flex-shrink: 0;
+	}
+
+	/* ── Winner spotlight ── */
+	.rv-winner {
+		display: flex;
+		gap: 1.25rem;
+		align-items: flex-start;
+		padding: 1.25rem 1.5rem;
+		border-radius: var(--r-lg);
+		position: relative;
+		overflow: hidden;
+	}
+	.rv-winner-thumb {
+		flex-shrink: 0;
+		width: 120px;
+		height: 120px;
+		border-radius: 14px;
+		overflow: hidden;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		background: rgba(255, 255, 255, 0.05);
+		border: 1px solid;
+		text-decoration: none;
+		position: relative;
+		transition: transform 0.15s;
+	}
+	.rv-winner-thumb:hover { transform: scale(1.03); }
+	.rv-winner-thumb img {
+		width: 100%;
+		height: 100%;
+		object-fit: cover;
+	}
+	.rv-winner-icon { font-size: 2.8rem; }
+	.rv-winner-platform {
+		position: absolute;
+		bottom: 5px;
+		right: 5px;
+		font-size: 0.8rem;
+		border-radius: 8px;
+		border: 1px solid;
+		padding: 1px 5px;
+		backdrop-filter: blur(8px);
+		line-height: 1.4;
+	}
+	.rv-winner-info {
+		flex: 1;
+		min-width: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 0.45rem;
+	}
+	.rv-winner-badges {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+	}
+	.rv-winner-url {
+		font-size: 0.85rem;
+		color: var(--text-soft);
+		font-family: var(--font-mono);
+		word-break: break-all;
+		margin: 0;
+	}
+	.rv-winner-meta {
+		font-size: 0.8rem;
+		color: var(--text-muted);
+		display: flex;
+		align-items: center;
+		gap: 0.4rem;
+		flex-wrap: wrap;
+	}
+	.rv-winner-votes {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.35rem;
+		margin-top: 0.2rem;
+	}
+	.rv-winner-score {
+		flex-shrink: 0;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+	}
+	.rv-big-score {
+		font-size: 2.8rem;
+		font-weight: 800;
+		letter-spacing: -0.05em;
+		font-family: var(--font-mono);
+		color: var(--gold);
+		text-shadow: 0 0 24px rgba(255, 209, 102, 0.4);
+		line-height: 1;
+	}
+	.rv-dot { opacity: 0.4; }
+
+	/* ── Vote chips ── */
+	.rv-vote-chip {
+		display: inline-flex;
+		align-items: center;
+		gap: 3px;
+		padding: 2px 8px;
+		border-radius: 8px;
+		background: rgba(255, 255, 255, 0.06);
+		border: 1px solid rgba(255, 255, 255, 0.1);
+		font-size: 0.72rem;
+		transition: background 0.15s;
+	}
+	.rv-vote-chip.rv-vote-high {
+		background: rgba(94, 227, 210, 0.12);
+		border-color: rgba(94, 227, 210, 0.3);
+		color: var(--teal);
+	}
+	.rv-vote-chip.rv-vote-low {
+		background: rgba(255, 84, 112, 0.1);
+		border-color: rgba(255, 84, 112, 0.25);
+		color: var(--coral-bright);
+	}
+	.rv-vote-initial {
+		font-size: 0.62rem;
+		font-weight: 700;
+		opacity: 0.65;
+	}
+	.rv-vote-val { font-weight: 700; }
+
+	/* ── Tabs ── */
+	.rv-tabs {
+		display: flex;
+		gap: 0.35rem;
+		background: rgba(255, 255, 255, 0.04);
+		border: 1px solid var(--glass-border);
+		border-radius: 12px;
+		padding: 0.3rem;
+	}
+	.rv-tab {
+		flex: 1;
+		padding: 0.5rem 0.75rem;
+		border-radius: 9px;
+		border: none;
+		background: none;
+		font-size: 0.82rem;
+		font-weight: 600;
+		color: var(--text-muted);
+		cursor: pointer;
+		transition: background 0.15s, color 0.15s;
+	}
+	.rv-tab:hover { background: rgba(255, 255, 255, 0.06); color: var(--text); }
+	.rv-tab.active {
+		background: var(--glass-bg-strong);
+		color: var(--text);
+		box-shadow: inset 0 1px 0 var(--glass-highlight);
+	}
+
+	/* ── Rank list ── */
+	.rv-rank-list {
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+	}
+	.rv-rank-row {
+		display: flex;
+		align-items: center;
+		gap: 0.85rem;
+		padding: 0.75rem 1rem;
+		border-radius: var(--r-md);
+		transition: transform 0.12s;
+	}
+	.rv-rank-row:hover { transform: translateY(-1px); }
+	.rv-rank-podium {
+		border-color: rgba(255, 209, 102, 0.2) !important;
+		box-shadow: inset 0 1px 0 rgba(255, 209, 102, 0.08), var(--shadow-sm);
+	}
+	.rv-rank-bottom {
+		border-color: rgba(255, 84, 112, 0.18) !important;
+	}
+	.rv-rank-pos {
+		flex-shrink: 0;
+		width: 36px;
+		text-align: center;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+	}
+	.rv-rank-num {
+		font-size: 0.9rem;
+		font-weight: 700;
+		color: var(--text-muted);
+	}
+	.rv-rank-thumb {
+		flex-shrink: 0;
+		width: 48px;
+		height: 48px;
+		border-radius: 10px;
+		overflow: hidden;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		border: 1px solid;
+		text-decoration: none;
+		transition: transform 0.12s;
+	}
+	.rv-rank-thumb:hover { transform: scale(1.06); }
+	.rv-rank-thumb img { width: 100%; height: 100%; object-fit: cover; }
+	.rv-rank-info {
+		flex: 1;
+		min-width: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 0.2rem;
+	}
+	.rv-rank-url {
+		font-size: 0.82rem;
+		font-weight: 600;
+		color: var(--text);
+		font-family: var(--font-mono);
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+	.rv-rank-sub {
+		font-size: 0.74rem;
+		color: var(--text-muted);
+		display: flex;
+		align-items: center;
+		gap: 0.35rem;
+	}
+	.rv-rank-votes {
+		display: flex;
+		gap: 0.25rem;
+		flex-wrap: wrap;
+		flex-shrink: 0;
+	}
+	.rv-rank-avg {
+		flex-shrink: 0;
+		text-align: center;
+		min-width: 44px;
+	}
+	.rv-rank-avg-num {
+		font-size: 1.2rem;
+		font-weight: 800;
+		letter-spacing: -0.03em;
+		font-family: var(--font-mono);
+		line-height: 1;
+	}
+
+	/* ── Players grid ── */
+	.rv-players-grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+		gap: 0.75rem;
+	}
+	.rv-player-card {
+		padding: 1.1rem 1.2rem;
+		border-radius: var(--r-lg);
+		display: flex;
+		flex-direction: column;
+		gap: 0.9rem;
+	}
+	.rv-player-header {
+		display: flex;
+		align-items: center;
+		gap: 0.6rem;
+		flex-wrap: wrap;
+	}
+	.rv-player-avatar {
+		width: 38px;
+		height: 38px;
+		border-radius: 50%;
+		background: linear-gradient(135deg, var(--violet), var(--coral));
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		font-size: 0.72rem;
+		font-weight: 800;
+		color: #fff;
+		flex-shrink: 0;
+	}
+	.rv-player-name {
+		font-size: 0.95rem;
+		font-weight: 700;
+		letter-spacing: -0.01em;
+	}
+	.rv-player-stats {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: 0.6rem;
+	}
+	.rv-mini-stat {
+		display: flex;
+		flex-direction: column;
+		gap: 0.15rem;
+		background: rgba(255, 255, 255, 0.03);
+		border: 1px solid rgba(255, 255, 255, 0.06);
+		border-radius: 8px;
+		padding: 0.45rem 0.6rem;
+	}
+	.rv-mini-num {
+		font-size: 1.3rem;
+		font-weight: 800;
+		letter-spacing: -0.03em;
+		font-family: var(--font-mono);
+		line-height: 1;
+	}
+
+	/* ── Reactions ── */
+	.rv-reactions {
+		display: flex;
+		align-items: center;
+		gap: 0.4rem 0.6rem;
+		flex-wrap: wrap;
+		margin-top: 0.25rem;
+		padding-top: 0.5rem;
+		border-top: 1px solid rgba(255, 255, 255, 0.06);
+	}
+	.rv-reaction-item {
+		display: inline-flex;
+		align-items: center;
+		gap: 3px;
+		font-size: 0.85rem;
+		background: rgba(255, 255, 255, 0.05);
+		border: 1px solid rgba(255, 255, 255, 0.08);
+		border-radius: 8px;
+		padding: 2px 8px;
+	}
+	.rv-reaction-item strong {
+		font-size: 0.75rem;
+		color: var(--text-muted);
+	}
+
+	/* ── Empty state ── */
+	.rv-empty {
+		text-align: center;
+		padding: 2.5rem 1.5rem;
+		border-radius: var(--r-lg);
+		color: var(--text-muted);
+		font-size: 0.95rem;
+	}
+
+	/* ── Responsive tweaks for small screens ── */
+	@media (max-width: 560px) {
+		.rv-winner { flex-wrap: wrap; }
+		.rv-winner-thumb { width: 90px; height: 90px; }
+		.rv-winner-score { width: 100%; flex-direction: row; align-items: baseline; gap: 0.5rem; }
+		.rv-big-score { font-size: 2rem; }
+		.rv-rank-votes { display: none; } /* hide per-user chips on mobile to save space */
+		.rv-stats { gap: 1rem; }
+		.rv-stat-num { font-size: 1.4rem; }
 	}
 </style>
