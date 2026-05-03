@@ -1007,6 +1007,7 @@
 {/each}
 
 <div class="session-page"
+	class:pres-mode={session && session.status === 'active' && view === 'presentation'}
 	onmousemove={onMouseMove}
 	role="presentation"
 >
@@ -1015,6 +1016,7 @@
 	{/if}
 
 	{#if session}
+		{#if !(session.status === 'active' && view === 'presentation')}
 		<div class="session-header glass">
 			<div class="session-header-inner">
 				<!-- Left: back + session name + status -->
@@ -1088,6 +1090,7 @@
 				</div>
 			</div>
 		</div>
+		{/if}<!-- /!pres-mode header -->
 
 		<!-- PENDING -->
 		{#if session.status === 'pending'}
@@ -1228,6 +1231,36 @@
 
 					<!-- ── Main column ── -->
 					<div class="sesh-main">
+
+						<!-- Compact top bar (replaces session-header in pres mode) -->
+						<div class="pres-topbar glass">
+							<button class="btn-ghost btn-icon pres-back" onclick={() => goto('/sessions')} title="Volver">‹</button>
+							<div class="pres-title-group">
+								<div class="pres-name-row">
+									<span class="pres-name">{session.name}</span>
+									<span class="chip chip-teal sh-live-chip"><span class="live-dot"></span>LIVE</span>
+								</div>
+								<div class="pres-meta">
+									<span class="mono tabular">⏱ {elapsed}</span>
+									<span class="pres-sep">·</span>
+									<span class="mono tabular">{currentIndex + 1} / {session.session_memes.length}</span>
+									<span class="pres-sep">·</span>
+									<span>{session.participants.length} viendo</span>
+								</div>
+							</div>
+							<div class="pres-progress">
+								<div style="display:flex;justify-content:space-between;font-size:0.68rem;margin-bottom:3px;color:var(--text-muted)">
+									<span>Sesión</span>
+									<span class="mono tabular">{Math.round((currentIndex + 1) / session.session_memes.length * 100)}%</span>
+								</div>
+								<div class="sh-prog-track">
+									<div class="sh-prog-fill" style="width:{((currentIndex + 1) / session.session_memes.length) * 100}%"></div>
+								</div>
+							</div>
+							<button class="btn-glass pres-notepad-btn" class:hud-notepad-active={noteVisible} onclick={() => (noteVisible = !noteVisible)}>
+								📝 Notepad
+							</button>
+						</div>
 
 						<!-- Video stage area (centered, aspect-ratio) -->
 						<div class="stage-wrap">
@@ -2981,6 +3014,11 @@
 		padding: 1rem 1.25rem 3rem;
 		box-sizing: border-box;
 	}
+	/* Full-bleed presentation mode */
+	.session-page.pres-mode {
+		max-width: 100%;
+		padding: 0.6rem 0.75rem 0.75rem;
+	}
 
 	/* ── Shared cursors ── */
 	.shared-cursor {
@@ -3841,6 +3879,58 @@
 	   PRESENTATION GRID LAYOUT (v2 - handoff match)
 	══════════════════════════════════════════ */
 
+	/* Compact in-grid top bar */
+	.pres-topbar {
+		padding: 0.65rem 1rem;
+		border-radius: 14px;
+		display: flex;
+		align-items: center;
+		gap: 0.85rem;
+		flex-shrink: 0;
+	}
+	.pres-back {
+		width: 32px;
+		height: 32px;
+		font-size: 1.25rem;
+		flex-shrink: 0;
+	}
+	.pres-title-group {
+		flex: 1;
+		min-width: 0;
+	}
+	.pres-name-row {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+	}
+	.pres-name {
+		font-size: 0.95rem;
+		font-weight: 700;
+		letter-spacing: -0.01em;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+	.pres-meta {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		font-size: 0.74rem;
+		color: var(--text-muted);
+		margin-top: 0.12rem;
+	}
+	.pres-sep { opacity: 0.4; }
+	.pres-progress {
+		width: 200px;
+		flex-shrink: 0;
+	}
+	.pres-notepad-btn {
+		font-size: 0.82rem;
+		padding: 0.38rem 0.75rem;
+		flex-shrink: 0;
+		white-space: nowrap;
+	}
+
 	/* Grid wrapper */
 	.sesh-grid {
 		display: grid;
@@ -3865,8 +3955,9 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		min-height: calc(100dvh - 320px);
-		max-height: calc(100dvh - 260px);
+		/* topbar ~60px + hud ~180px + grid gaps + page padding */
+		min-height: calc(100dvh - 340px);
+		max-height: calc(100dvh - 310px);
 	}
 
 	/* Video stage */
@@ -3883,14 +3974,14 @@
 		/* Default: wide (16/9) */
 		width: 100%;
 		aspect-ratio: 16/9;
-		max-height: calc(100dvh - 280px);
+		max-height: calc(100dvh - 310px);
 	}
 	.video-stage-vertical {
 		aspect-ratio: 9/16;
 		width: auto;
-		height: 100%;
-		max-height: calc(100dvh - 280px);
-		max-width: min(100%, calc((100dvh - 280px) * 9 / 16));
+		height: calc(100dvh - 310px);
+		max-height: calc(100dvh - 310px);
+		max-width: min(100%, calc((100dvh - 310px) * 9 / 16));
 	}
 	.stage-embed {
 		position: absolute;
@@ -4207,12 +4298,12 @@
 		display: flex;
 		flex-direction: column;
 		gap: 0.75rem;
-		max-height: calc(100dvh - 140px);
+		max-height: calc(100dvh - 80px);
 		overflow-y: auto;
 		overflow-x: hidden;
 		scrollbar-width: thin;
 		position: sticky;
-		top: 1rem;
+		top: 0.6rem;
 		align-self: flex-start;
 	}
 	.sesh-sidebar .notepad-textarea {
