@@ -1229,46 +1229,154 @@
 				{@const isPlaying = playbackStates[myId]?.playing ?? false}
 				<div class="sesh-grid" class:sesh-with-sidebar={noteVisible}>
 
-					<!-- ── Main column ── -->
-					<div class="sesh-main">
+					<!-- Topbar: spans all columns -->
+					<div class="pres-topbar glass sesh-full-row">
+						<button class="btn-ghost btn-icon pres-back" onclick={() => goto('/sessions')} title="Volver">‹</button>
+						<div class="pres-title-group">
+							<div class="pres-name-row">
+								<span class="pres-name">{session.name}</span>
+								<span class="chip chip-teal sh-live-chip"><span class="live-dot"></span>LIVE</span>
+							</div>
+							<div class="pres-meta">
+								<span class="mono tabular">⏱ {elapsed}</span>
+								<span class="pres-sep">·</span>
+								<span class="mono tabular">{currentIndex + 1} / {session.session_memes.length}</span>
+								<span class="pres-sep">·</span>
+								<span>{session.participants.length} viendo</span>
+							</div>
+						</div>
+						<div class="pres-progress">
+							<div style="display:flex;justify-content:space-between;font-size:0.68rem;margin-bottom:3px;color:var(--text-muted)">
+								<span>Sesión</span>
+								<span class="mono tabular">{Math.round((currentIndex + 1) / session.session_memes.length * 100)}%</span>
+							</div>
+							<div class="sh-prog-track">
+								<div class="sh-prog-fill" style="width:{((currentIndex + 1) / session.session_memes.length) * 100}%"></div>
+							</div>
+						</div>
+						<button class="btn-glass pres-notepad-btn" class:hud-notepad-active={noteVisible} onclick={() => (noteVisible = !noteVisible)}>
+							📝 Notepad
+						</button>
+					</div>
 
-						<!-- Compact top bar (replaces session-header in pres mode) -->
-						<div class="pres-topbar glass">
-							<button class="btn-ghost btn-icon pres-back" onclick={() => goto('/sessions')} title="Volver">‹</button>
-							<div class="pres-title-group">
-								<div class="pres-name-row">
-									<span class="pres-name">{session.name}</span>
-									<span class="chip chip-teal sh-live-chip"><span class="live-dot"></span>LIVE</span>
+					<!-- Left HUD column -->
+					<div class="sesh-left glass-strong">
+
+						<!-- Meta: platform + title + stats + submitter -->
+						<div class="sl-meta">
+							<div class="sl-plat-row">
+								<div class="hud-plat-badge" style="background:linear-gradient(135deg,{PLAT.c}33,{PLAT.c}11);border-color:{PLAT.c}44">
+									<span style="color:{PLAT.c}">{PLAT.g}</span>
 								</div>
-								<div class="pres-meta">
-									<span class="mono tabular">⏱ {elapsed}</span>
-									<span class="pres-sep">·</span>
-									<span class="mono tabular">{currentIndex + 1} / {session.session_memes.length}</span>
-									<span class="pres-sep">·</span>
-									<span>{session.participants.length} viendo</span>
-								</div>
-							</div>
-							<div class="pres-progress">
-								<div style="display:flex;justify-content:space-between;font-size:0.68rem;margin-bottom:3px;color:var(--text-muted)">
-									<span>Sesión</span>
-									<span class="mono tabular">{Math.round((currentIndex + 1) / session.session_memes.length * 100)}%</span>
-								</div>
-								<div class="sh-prog-track">
-									<div class="sh-prog-fill" style="width:{((currentIndex + 1) / session.session_memes.length) * 100}%"></div>
+								<div class="sl-title-wrap">
+									{#if smeta?.title}
+										<div class="sl-title">{smeta.title}</div>
+									{:else}
+										<div class="sl-title sl-title-muted">{embed.type}</div>
+									{/if}
 								</div>
 							</div>
-							<button class="btn-glass pres-notepad-btn" class:hud-notepad-active={noteVisible} onclick={() => (noteVisible = !noteVisible)}>
-								📝 Notepad
-							</button>
+							<div class="sl-stats">
+								{#if smeta?.uploader}<span class="sl-uploader" style="color:{PLAT.c}">{smeta.uploader}</span>{/if}
+								{#if smeta?.view_count}<span class="meta-chip">👁 {smeta.view_count >= 1_000_000 ? (smeta.view_count/1_000_000).toFixed(1)+'M' : smeta.view_count >= 1_000 ? (smeta.view_count/1_000).toFixed(0)+'K' : smeta.view_count}</span>{/if}
+								{#if smeta?.like_count}<span class="meta-chip">♥ {smeta.like_count >= 1_000_000 ? (smeta.like_count/1_000_000).toFixed(1)+'M' : smeta.like_count >= 1_000 ? (smeta.like_count/1_000).toFixed(0)+'K' : smeta.like_count}</span>{/if}
+								{#if smeta?.comment_count}<span class="meta-chip">💬 {smeta.comment_count >= 1_000 ? (smeta.comment_count/1_000).toFixed(0)+'K' : smeta.comment_count}</span>{/if}
+								{#if smeta?.duration}<span class="meta-chip">⏱ {smeta.duration >= 60 ? Math.floor(smeta.duration/60)+'m'+(smeta.duration%60>0?(smeta.duration%60)+'s':'') : smeta.duration+'s'}</span>{/if}
+							</div>
+							<div class="sl-submitter-row">
+								<span class="hud-submitter-init">{(session.participants.find(p=>p.id===sm.meme.user_id)?.display_name??'?').slice(0,2).toUpperCase()}</span>
+								<span class="sl-submitter-name">{session.participants.find(p=>p.id===sm.meme.user_id)?.display_name||'?'}</span>
+								{#if sm.extra_count > 0}<span class="chip chip-coral" style="font-size:0.65rem">×{sm.extra_count+1}</span>{/if}
+							</div>
 						</div>
 
-						<!-- Video stage area (centered, aspect-ratio) -->
-						<div class="stage-wrap">
-							<div
-								class="video-stage"
-								class:video-stage-vertical={isVertical}
-								style="--plat-c: {PLAT.c}"
-							>
+						<!-- Vertical vote slider -->
+						<div class="sl-vote">
+							<div class="sl-vote-top">
+								<span class="eyebrow" style="font-size:0.6rem">Tu voto</span>
+								<div class="sl-vote-display">
+									<span class="sl-vote-num" class:sl-vote-active={sliderVal !== null}>{sliderVal ?? '—'}</span>
+									<span class="sl-vote-denom">/{totalMemes}</span>
+								</div>
+							</div>
+
+							<div class="sl-track-area">
+								<span class="sl-emoji-label">🏆</span>
+								<div class="sl-track-wrap">
+									<input
+										type="range"
+										orient="vertical"
+										min="0"
+										max={totalMemes}
+										value={sliderVal ?? Math.round(totalMemes / 2)}
+										class="rank-slider sl-range-v"
+										onchange={(e) => {
+											const resolved = resolveScore(+e.target.value, sm.meme.id, totalMemes);
+											e.target.value = resolved;
+											castVote(sm.meme.id, resolved);
+										}}
+									/>
+									<!-- Other users' votes as side dots -->
+									{#each votes.filter(v => v.meme_id === sm.meme.id && v.user_id !== myId) as ov}
+										{@const participant = session.participants.find(p => p.id === ov.user_id)}
+										<span
+											class="other-vote-dot-v"
+											style="bottom:{(ov.value/totalMemes)*100}%"
+											title="{participant?.display_name}: {ov.value}/{totalMemes}"
+										>{participant?.display_name?.slice(0,1)??'?'}</span>
+									{/each}
+								</div>
+								<span class="sl-emoji-label">💀</span>
+							</div>
+
+							<!-- Who voted -->
+							<div class="hud-who-voted sl-who-voted">
+								{#each session.participants as p}
+									{@const voted = votes.some(v => v.meme_id === sm.meme.id && v.user_id === p.id)}
+									<div class="voted-avatar" class:voted-done={voted} title="{p.display_name}{voted?'  ✓':''}">
+										{p.display_name.slice(0,2).toUpperCase()}
+										{#if voted}<span class="voted-check">✓</span>{/if}
+									</div>
+								{/each}
+							</div>
+						</div>
+
+						<!-- Transport controls -->
+						<div class="sl-transport">
+							{#if isLocalVideo}
+								<div class="sl-media-btns">
+									<button class="btn-icon btn-glass hud-icon-btn" onclick={() => { if (localVideoEl) { localVideoEl.paused ? localVideoEl.play() : localVideoEl.pause(); } }}>
+										{isPlaying ? '⏸' : '▶'}
+									</button>
+									<button class="btn-icon btn-glass hud-icon-btn" class:hud-muted={localVideoMuted} onclick={() => { if (localVideoEl) { localVideoEl.muted = !localVideoEl.muted; } }}>
+										{localVideoMuted ? '🔇' : '🔊'}
+									</button>
+								</div>
+							{/if}
+							<div class="sl-fun-row">
+								{#each FUN_BUTTONS as emoji}
+									<button class="fun-btn" onclick={() => sendFunTap(emoji)} title={emoji}>{emoji}</button>
+								{/each}
+							</div>
+							<div class="sl-nav-btns">
+								<button class="btn-glass sl-nav-btn" onclick={prev} disabled={currentIndex === 0}>‹ Anterior</button>
+								{#if currentIndex === session.session_memes.length - 1}
+									<button class="btn-glass sl-nav-btn" onclick={showRanking}>📊 Ranking</button>
+								{:else}
+									<button class="btn-primary sl-nav-btn" class:hud-next-ready={nextVoters.includes(myId)} onclick={voteNext}>Siguiente ›</button>
+								{/if}
+							</div>
+						</div>
+
+					</div><!-- /sesh-left -->
+
+					<!-- Video stage (center column) -->
+					<div class="stage-wrap">
+						<div
+							class="video-stage"
+							class:video-stage-vertical={isVertical}
+							style="--plat-c: {PLAT.c}"
+						>
 								<!-- SYNCED badge -->
 								{#if connectedUsers > 1}
 									<div class="synced-badge">
@@ -1336,150 +1444,6 @@
 								{/key}
 							</div><!-- /video-stage -->
 						</div><!-- /stage-wrap -->
-
-						<!-- Bottom HUD -->
-						<div class="glass-strong sesh-hud">
-
-							<!-- Row 1: platform badge + title + meta + submitter -->
-							<div class="hud-row hud-meta-row">
-								<div class="hud-plat-badge" style="background: linear-gradient(135deg, {PLAT.c}33, {PLAT.c}11); border-color: {PLAT.c}44">
-									<span style="color:{PLAT.c}">{PLAT.g}</span>
-								</div>
-								<div class="hud-info">
-									{#if smeta?.title}
-										<div class="hud-title">{smeta.title}</div>
-									{/if}
-									<div class="hud-sub">
-										{#if smeta?.uploader}<span style="color:{PLAT.c};font-weight:600">{smeta.uploader}</span>{/if}
-										{#if smeta?.view_count}<span class="meta-chip">👁 {smeta.view_count >= 1_000_000 ? (smeta.view_count/1_000_000).toFixed(1)+'M' : smeta.view_count >= 1_000 ? (smeta.view_count/1_000).toFixed(0)+'K' : smeta.view_count}</span>{/if}
-										{#if smeta?.like_count}<span class="meta-chip">♥ {smeta.like_count >= 1_000_000 ? (smeta.like_count/1_000_000).toFixed(1)+'M' : smeta.like_count >= 1_000 ? (smeta.like_count/1_000).toFixed(0)+'K' : smeta.like_count}</span>{/if}
-										{#if smeta?.comment_count}<span class="meta-chip">💬 {smeta.comment_count >= 1_000 ? (smeta.comment_count/1_000).toFixed(0)+'K' : smeta.comment_count}</span>{/if}
-									</div>
-								</div>
-								<div class="hud-meta-chips">
-									<span class="chip hud-submitter-chip">
-										añadido por
-										<span class="hud-submitter-init">{(session.participants.find(p => p.id === sm.meme.user_id)?.display_name ?? '?').slice(0,2).toUpperCase()}</span>
-										{session.participants.find(p => p.id === sm.meme.user_id)?.display_name || '?'}
-									</span>
-									{#if sm.extra_count > 0}<span class="chip chip-coral">×{sm.extra_count + 1} duplicados</span>{/if}
-								</div>
-							</div>
-
-							<!-- Row 2: vote slider (ranking) -->
-							<div class="hud-vote-section">
-								<div class="hud-vote-header">
-									<span class="eyebrow" style="font-size:0.62rem">Tu voto</span>
-									<div class="hud-vote-big">
-										<span class="hud-vote-num" class:hud-vote-num-active={sliderVal !== null}>
-											{sliderVal ?? '—'}
-										</span>
-										<span class="hud-vote-denom">/{totalMemes}</span>
-									</div>
-									<div class="hud-who-voted-wrap">
-										<span class="eyebrow" style="font-size:0.62rem">Quién ha votado</span>
-										<div class="hud-who-voted">
-											{#each session.participants as p}
-												{@const voted = votes.some(v => v.meme_id === sm.meme.id && v.user_id === p.id)}
-												<div class="voted-avatar" class:voted-done={voted} title="{p.display_name}{voted ? ' ✓' : ''}">
-													{p.display_name.slice(0,2).toUpperCase()}
-													{#if voted}<span class="voted-check">✓</span>{/if}
-												</div>
-											{/each}
-										</div>
-									</div>
-								</div>
-
-								<!-- Slider track -->
-								<div class="rank-slider-track hud-rank-track">
-									{#if sliderVal !== null}
-										<div class="rank-badge" style="left: {rankPct * 100}%">{sliderVal}</div>
-									{/if}
-									<input
-										type="range"
-										min="0"
-										max={totalMemes}
-										value={sliderVal ?? Math.round(totalMemes / 2)}
-										class="rank-slider"
-										onchange={(e) => {
-											const resolved = resolveScore(+e.target.value, sm.meme.id, totalMemes);
-											e.target.value = resolved;
-											castVote(sm.meme.id, resolved);
-										}}
-									/>
-									{#each votes.filter(v => v.meme_id === sm.meme.id && v.user_id !== myId) as ov}
-										{@const participant = session.participants.find(p => p.id === ov.user_id)}
-										<span class="other-vote-dot" title="{participant?.display_name}: {ov.value}/{totalMemes}" style="left: {(ov.value / totalMemes) * 100}%">
-											<span class="other-vote-initial">{participant?.display_name?.slice(0,1) ?? '?'}</span>
-										</span>
-									{/each}
-									{#each [...usedOther] as taken}
-										<span class="taken-tick" style="left: {(taken / totalMemes) * 100}%"></span>
-									{/each}
-								</div>
-								<div class="hud-rank-labels">
-									<span>💀 Peor</span>
-									{#if sliderVal !== null}
-										<span class="hud-rank-hint">
-											{#if rankPct < 0.25}💀 fondo
-											{:else if rankPct < 0.5}😐 medio-bajo
-											{:else if rankPct < 0.75}😄 medio-alto
-											{:else}🔥 top
-											{/if}
-										</span>
-									{/if}
-									<span>🏆 Mejor</span>
-								</div>
-							</div>
-
-							<!-- Row 3: transport controls -->
-							<div class="hud-row hud-transport-row">
-								<button class="btn-glass hud-transport-btn" onclick={prev} disabled={currentIndex === 0}>
-									‹ Anterior
-								</button>
-
-								{#if isLocalVideo}
-									<button class="btn-icon btn-glass hud-icon-btn" onclick={() => {
-										if (localVideoEl) { localVideoEl.paused ? localVideoEl.play() : localVideoEl.pause(); }
-									}} title={isPlaying ? 'Pausar' : 'Reproducir'}>
-										{isPlaying ? '⏸' : '▶'}
-									</button>
-									<button class="btn-icon btn-glass hud-icon-btn" class:hud-muted={localVideoMuted} onclick={() => { if (localVideoEl) { localVideoEl.muted = !localVideoEl.muted; } }} title={localVideoMuted ? 'Activar sonido' : 'Silenciar'}>
-										{localVideoMuted ? '🔇' : '🔊'}
-									</button>
-								{/if}
-
-								<!-- Fun reaction buttons -->
-								<div class="hud-fun-row">
-									{#each FUN_BUTTONS as emoji}
-										<button class="fun-btn" onclick={() => sendFunTap(emoji)} title={emoji}>{emoji}</button>
-									{/each}
-								</div>
-
-								<div class="hud-spacer"></div>
-
-								<button class="btn-glass hud-notepad-btn" class:hud-notepad-active={noteVisible} onclick={() => (noteVisible = !noteVisible)} title="Sidebar">
-									📝
-								</button>
-
-								{#if currentIndex === session.session_memes.length - 1}
-									<button class="btn-glass hud-transport-btn" onclick={showRanking}>
-										📊 Ranking
-									</button>
-								{:else}
-									<button
-										class="btn-primary hud-transport-btn"
-										class:hud-next-ready={nextVoters.includes(myId)}
-										onclick={voteNext}
-									>
-										Siguiente ›
-									</button>
-								{/if}
-							</div>
-
-						</div><!-- /sesh-hud -->
-
-					</div><!-- /sesh-main -->
 
 					<!-- ── Sidebar column ── -->
 					{#if noteVisible}
@@ -3014,10 +2978,10 @@
 		padding: 1rem 1.25rem 3rem;
 		box-sizing: border-box;
 	}
-	/* Full-bleed presentation mode */
+	/* Full-bleed presentation mode — height + overflow handled in grid section below */
 	.session-page.pres-mode {
 		max-width: 100%;
-		padding: 0.6rem 0.75rem 0.75rem;
+		padding: 0.6rem 0.75rem 0.55rem;
 	}
 
 	/* ── Shared cursors ── */
@@ -3931,23 +3895,216 @@
 		white-space: nowrap;
 	}
 
-	/* Grid wrapper */
-	.sesh-grid {
-		display: grid;
-		grid-template-columns: 1fr;
-		gap: 1rem;
-		align-items: start;
-	}
-	.sesh-with-sidebar {
-		grid-template-columns: 1fr 360px;
+	/* ── Pres-mode: full-height grid ── */
+	.session-page.pres-mode {
+		height: calc(100dvh - 52px);
+		overflow: hidden;
 	}
 
-	/* Main column */
-	.sesh-main {
+	/* Grid wrapper — 3 cols: left-hud | video | (sidebar) */
+	.sesh-grid {
+		display: grid;
+		grid-template-columns: 220px 1fr;
+		grid-template-rows: auto 1fr;
+		gap: 0.6rem;
+		height: 100%;
+	}
+	.sesh-with-sidebar {
+		grid-template-columns: 220px 1fr 340px;
+	}
+	/* Topbar spans all columns */
+	.sesh-full-row {
+		grid-column: 1 / -1;
+	}
+
+	/* Left HUD column */
+	.sesh-left {
 		display: flex;
 		flex-direction: column;
-		gap: 0.75rem;
+		gap: 0;
+		border-radius: 16px;
+		overflow: hidden;
 		min-width: 0;
+	}
+
+	/* Meta section (platform badge + title + stats + submitter) */
+	.sl-meta {
+		padding: 0.75rem 0.85rem 0.6rem;
+		display: flex;
+		flex-direction: column;
+		gap: 0.45rem;
+		border-bottom: 1px solid rgba(255,255,255,0.07);
+	}
+	.sl-plat-row {
+		display: flex;
+		align-items: flex-start;
+		gap: 0.6rem;
+	}
+	.sl-title-wrap { flex: 1; min-width: 0; }
+	.sl-title {
+		font-size: 0.82rem;
+		font-weight: 600;
+		line-height: 1.35;
+		display: -webkit-box;
+		-webkit-line-clamp: 3;
+		-webkit-box-orient: vertical;
+		overflow: hidden;
+	}
+	.sl-title-muted { color: var(--text-muted); font-style: italic; font-weight: 400; }
+	.sl-stats {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.3rem;
+		align-items: center;
+	}
+	.sl-uploader {
+		font-size: 0.72rem;
+		font-weight: 600;
+	}
+	.sl-submitter-row {
+		display: flex;
+		align-items: center;
+		gap: 0.4rem;
+		font-size: 0.72rem;
+		color: var(--text-muted);
+	}
+	.sl-submitter-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+	/* Vertical vote area */
+	.sl-vote {
+		flex: 1;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		padding: 0.6rem 0.85rem;
+		gap: 0.4rem;
+		border-bottom: 1px solid rgba(255,255,255,0.07);
+		min-height: 0;
+	}
+	.sl-vote-top {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		width: 100%;
+	}
+	.sl-vote-display { display: flex; align-items: baseline; gap: 3px; }
+	.sl-vote-num {
+		font-size: 1.8rem;
+		font-weight: 800;
+		font-family: var(--font-mono);
+		letter-spacing: -0.04em;
+		line-height: 1;
+		color: rgba(255,255,255,0.22);
+		transition: color 0.2s;
+	}
+	.sl-vote-num.sl-vote-active { color: var(--coral-bright); }
+	.sl-vote-denom { font-size: 0.75rem; color: var(--text-muted); font-family: var(--font-mono); }
+
+	/* Track area: emoji + slider + emoji */
+	.sl-track-area {
+		flex: 1;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 0.3rem;
+		min-height: 0;
+		width: 100%;
+	}
+	.sl-emoji-label { font-size: 1rem; line-height: 1; }
+	.sl-track-wrap {
+		flex: 1;
+		position: relative;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		min-height: 0;
+		width: 36px;
+	}
+	/* Vertical range input */
+	.sl-range-v {
+		writing-mode: vertical-lr;
+		direction: rtl;
+		-webkit-appearance: slider-vertical;
+		appearance: none;
+		width: 6px;
+		height: 100%;
+		cursor: pointer;
+		background: linear-gradient(to top, #ff3b3b, #ffb800, #2bd4a7);
+		border-radius: 999px;
+		outline: none;
+		border: none;
+		flex-shrink: 0;
+	}
+	.sl-range-v::-webkit-slider-thumb {
+		-webkit-appearance: none;
+		width: 22px;
+		height: 22px;
+		border-radius: 50%;
+		background: #fff;
+		box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+		cursor: pointer;
+		border: 2px solid rgba(255,255,255,0.3);
+		transition: transform 0.15s;
+	}
+	.sl-range-v::-webkit-slider-thumb:hover { transform: scale(1.18); }
+	.sl-range-v::-moz-range-thumb {
+		width: 22px;
+		height: 22px;
+		border-radius: 50%;
+		background: #fff;
+		box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+		border: 2px solid rgba(255,255,255,0.3);
+		cursor: pointer;
+	}
+	/* Other-user vote dots (vertical positioning) */
+	.other-vote-dot-v {
+		position: absolute;
+		left: calc(100% + 4px);
+		width: 16px;
+		height: 16px;
+		border-radius: 50%;
+		background: linear-gradient(135deg, var(--violet), var(--coral));
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		font-size: 0.5rem;
+		font-weight: 800;
+		color: #fff;
+		transform: translateY(50%);
+		pointer-events: none;
+		z-index: 2;
+	}
+
+	/* Who voted row */
+	.sl-who-voted {
+		display: flex;
+		gap: 0.25rem;
+		flex-wrap: wrap;
+		justify-content: center;
+		width: 100%;
+	}
+
+	/* Transport section */
+	.sl-transport {
+		display: flex;
+		flex-direction: column;
+		gap: 0.45rem;
+		padding: 0.65rem 0.85rem 0.75rem;
+	}
+	.sl-media-btns { display: flex; gap: 0.35rem; }
+	.sl-fun-row {
+		display: flex;
+		gap: 0.2rem;
+		flex-wrap: wrap;
+	}
+	.sl-nav-btns { display: flex; gap: 0.4rem; }
+	.sl-nav-btn {
+		flex: 1;
+		font-size: 0.8rem;
+		padding: 0.45rem 0.5rem;
+		border-radius: 10px;
+		white-space: nowrap;
+		text-align: center;
 	}
 
 	/* Stage wrap: centering container */
@@ -3955,33 +4112,32 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		/* topbar ~60px + hud ~180px + grid gaps + page padding */
-		min-height: calc(100dvh - 340px);
-		max-height: calc(100dvh - 310px);
+		min-height: 0;
+		height: 100%;
+		overflow: hidden;
 	}
 
 	/* Video stage */
 	.video-stage {
 		position: relative;
-		border-radius: 22px;
+		border-radius: 18px;
 		overflow: hidden;
 		background: linear-gradient(135deg, color-mix(in srgb, var(--plat-c, #7c6fd4) 15%, transparent), color-mix(in srgb, var(--plat-c, #7c6fd4) 4%, transparent)), #0a0612;
 		border: 1px solid rgba(255,255,255,0.08);
-		box-shadow: 0 30px 80px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.08);
+		box-shadow: 0 20px 60px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.08);
 		display: flex;
 		align-items: center;
 		justify-content: center;
 		/* Default: wide (16/9) */
 		width: 100%;
 		aspect-ratio: 16/9;
-		max-height: calc(100dvh - 310px);
+		max-height: 100%;
 	}
 	.video-stage-vertical {
 		aspect-ratio: 9/16;
 		width: auto;
-		height: calc(100dvh - 310px);
-		max-height: calc(100dvh - 310px);
-		max-width: min(100%, calc((100dvh - 310px) * 9 / 16));
+		height: 100%;
+		max-width: min(100%, calc(100% * 9 / 16));
 	}
 	.stage-embed {
 		position: absolute;
@@ -4297,14 +4453,12 @@
 	.sesh-sidebar {
 		display: flex;
 		flex-direction: column;
-		gap: 0.75rem;
-		max-height: calc(100dvh - 80px);
+		gap: 0.6rem;
 		overflow-y: auto;
 		overflow-x: hidden;
 		scrollbar-width: thin;
-		position: sticky;
-		top: 0.6rem;
-		align-self: flex-start;
+		height: 100%;
+		min-height: 0;
 	}
 	.sesh-sidebar .notepad-textarea {
 		flex: 1;
@@ -4335,20 +4489,20 @@
 	.participant-voted { border: 2px solid var(--teal); }
 
 	/* Responsive */
-	@media (max-width: 1024px) {
-		.sesh-with-sidebar { grid-template-columns: 1fr 300px; }
+	@media (max-width: 1200px) {
+		.sesh-with-sidebar { grid-template-columns: 200px 1fr 300px; }
 	}
-	@media (max-width: 900px) {
+	@media (max-width: 1024px) {
+		.sesh-grid { grid-template-columns: 200px 1fr; }
+		.sesh-with-sidebar { grid-template-columns: 200px 1fr 280px; }
+	}
+	@media (max-width: 800px) {
+		.sesh-grid { grid-template-columns: 1fr; }
 		.sesh-with-sidebar { grid-template-columns: 1fr; }
-		.sesh-sidebar { position: static; max-height: 50vh; }
-		.stage-wrap { min-height: 38dvh; max-height: 60dvh; }
+		.sesh-left { flex-direction: row; border-radius: 12px; }
+		.session-page.pres-mode { height: auto; overflow: visible; }
 	}
 	@media (max-width: 600px) {
-		.sesh-hud { padding: 0.7rem 0.8rem; }
-		.hud-meta-row { flex-wrap: wrap; }
-		.hud-meta-chips { align-items: flex-start; flex-direction: row; flex-wrap: wrap; }
-		.hud-vote-num { font-size: 1.8rem; }
-		.hud-fun-row { display: none; }
-		.stage-wrap { min-height: 34dvh; }
+		.sl-fun-row { display: none; }
 	}
 </style>
