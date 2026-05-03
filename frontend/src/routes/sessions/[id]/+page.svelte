@@ -1214,244 +1214,211 @@
 			{#if sm}
 				{@const embed = detectEmbed(sm.meme.url)}
 				{@const myVote = getMyVote(sm.meme.id)}
-				<div class="presentation-wrap">
-				<div class="presentation">
-					<div class="progress-bar">
-						<span>{currentIndex + 1} / {session.session_memes.length}</span>
-						<div class="bar">
-							<div
-								class="fill"
-								style="width: {((currentIndex + 1) / session.session_memes.length) * 100}%"
-							></div>
-						</div>
-					</div>
+				{@const smeta = mediaStatus[String(sm.meme.id)]?.meta}
+				{@const PLAT = ({tiktok:{g:'🎵',c:'#ff5470'},twitter:{g:'🐦',c:'#1d9bf0'},youtube:{g:'▶',c:'#ff0000'},instagram:{g:'📸',c:'#e040fb'},image:{g:'🖼️',c:'#5ee3d2'},link:{g:'🔗',c:'#7c6fd4'}})[embed.type] ?? {g:'🔗',c:'#7c6fd4'}}
+				{@const totalMemes = session.session_memes.length}
+				{@const sliderVal = myVote?.value ?? null}
+				{@const rankPct = sliderVal !== null ? sliderVal / totalMemes : null}
+				{@const usedOther = getUsedOtherScores(sm.meme.id)}
+				<div class="sesh-grid" class:sesh-with-sidebar={noteVisible}>
 
-				<div class="meme-and-nav">
-					<!-- Left panel: prev nav + reaction buttons -->
-					<div class="left-panel">
-						<button
-							class="nav-side nav-side-prev"
-							onclick={prev}
-							disabled={currentIndex === 0}
-							title="Anterior"
-						>‹</button>
-						<div class="fun-side-buttons">
-							{#each FUN_BUTTONS as emoji}
-								<button class="fun-btn fun-btn-side" onclick={() => sendFunTap(emoji)} title={emoji}>{emoji}</button>
+					<!-- ── Main column ── -->
+					<div class="sesh-main">
+
+						<!-- Video area: prev arrow + stage + next arrow -->
+						<div class="sesh-video-area">
+							<button class="nav-arrow nav-arrow-prev" onclick={prev} disabled={currentIndex === 0}>‹</button>
+
+							<div class="video-stage" class:video-vertical={embed.type === 'tiktok' || embed.type === 'instagram'}>
+
+								<!-- SYNCED badge -->
+								{#if connectedUsers > 1}
+									<div class="synced-badge">
+										<span class="synced-dot"></span>SYNCED
+									</div>
+								{/if}
+
+								<!-- Superfav flash -->
+								{#if (() => {
+									const mVotes = votes.filter(v => v.meme_id === sm.meme.id);
+									return mVotes.length >= session.participants.length && mVotes.every(v => v.value === totalMemes);
+								})()}
+									<div class="superfav-stage-flash">⭐ ¡SUPER FAVORITO!</div>
+								{/if}
+
+								<!-- Embed -->
+								{#key sm.meme.id}
+								{#if embed.type === 'youtube' && embed.embedUrl}
+									<iframe src={embed.embedUrl} title="YouTube" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope" allowfullscreen={true} class="stage-embed"></iframe>
+								{:else if embed.type === 'tiktok' && mediaStatus[String(sm.meme.id)]?.status === 'ready'}
+									<div class="sync-media-wrap stage-embed-wrap">
+										<video src="/api/sessions/{session.id}/media/{sm.meme.id}?token={authVal.token}" controls class="stage-video" use:localVideoSync></video>
+										{#if localVideoMuted}
+											<button class="unmute-stage" onclick={() => { if (localVideoEl) { localVideoEl.muted = false; } }}>🔇 Haz clic para activar el sonido</button>
+										{/if}
+									</div>
+								{:else if embed.type === 'tiktok' && embed.embedUrl}
+									<div class="sync-media-wrap stage-embed-wrap">
+										{#if mediaStatus[String(sm.meme.id)]?.status === 'pending'}
+											<div class="media-loading">⏬ Cargando vídeo local…</div>
+										{:else if mediaStatus[String(sm.meme.id)]?.status === 'slideshow'}
+											<div class="media-loading slideshow-badge">🖼️ Slideshow de imágenes</div>
+										{/if}
+										<iframe src={embed.embedUrl} title="TikTok" allow="autoplay; fullscreen; encrypted-media" allowfullscreen={true} class="stage-embed"></iframe>
+									</div>
+								{:else if embed.type === 'instagram' && embed.embedUrl}
+									<iframe src={embed.embedUrl} title="Instagram" allowfullscreen={true} class="stage-embed"></iframe>
+								{:else if embed.type === 'twitter' && mediaStatus[String(sm.meme.id)]?.status === 'ready'}
+									<div class="sync-media-wrap stage-embed-wrap">
+										<video src="/api/sessions/{session.id}/media/{sm.meme.id}?token={authVal.token}" controls class="stage-video" use:localVideoSync></video>
+										{#if localVideoMuted}
+											<button class="unmute-stage" onclick={() => { if (localVideoEl) { localVideoEl.muted = false; } }}>🔇 Haz clic para activar el sonido</button>
+										{/if}
+									</div>
+								{:else if embed.type === 'twitter'}
+									<div class="sync-media-wrap stage-embed-wrap">
+										{#if mediaStatus[String(sm.meme.id)]?.status === 'pending'}
+											<div class="media-loading">⏬ Cargando vídeo local…</div>
+										{/if}
+										{#if twitterEmbeds[sm.meme.id]}
+											<!-- eslint-disable-next-line svelte/no-at-html-tags -->
+											<div class="twitter-embed-wrap" use:tweetWidget>{@html twitterEmbeds[sm.meme.id]}</div>
+										{:else if twitterEmbeds[sm.meme.id] === null}
+											<div class="twitter-embed">
+												<p class="tweet-hint">No se pudo cargar el tweet.</p>
+												<a href={sm.meme.url} target="_blank" rel="noopener noreferrer" class="btn-secondary open-btn">🐦 Abrir en Twitter/X</a>
+											</div>
+										{:else}
+											<div class="twitter-embed"><p class="tweet-hint">Cargando tweet…</p></div>
+										{/if}
+									</div>
+								{:else if embed.type === 'image'}
+									<img src={sm.meme.url} alt="meme" class="stage-image" />
+								{:else}
+									<div class="stage-link">
+										<span style="font-size:2.5rem">{PLAT.g}</span>
+										<a href={sm.meme.url} target="_blank" rel="noopener noreferrer" class="btn-glass">🔗 Abrir enlace</a>
+									</div>
+								{/if}
+								{/key}
+
+							</div><!-- /video-stage -->
+
+							<!-- Right nav arrow -->
+							{#if currentIndex === session.session_memes.length - 1}
+								<button class="nav-arrow nav-arrow-next nav-rank-btn" onclick={showRanking} title="Ver ranking">📊</button>
+							{:else}
+								<button class="nav-arrow nav-arrow-next" class:nav-ready={nextVoters.includes(authVal.user?.id)} onclick={voteNext}>›</button>
+							{/if}
+						</div><!-- /sesh-video-area -->
+
+						<!-- Who pressed "next" dots -->
+						<div class="next-voters-row">
+							{#each session.participants as p}
+								<div class="nv-item" class:nv-voted={nextVoters.includes(p.id)} title={p.display_name}>
+									<div class="nv-dot"></div>
+									<span class="nv-name">{p.display_name.slice(0,7)}</span>
+								</div>
 							{/each}
 						</div>
-					</div>
 
-					<div class="card meme-display">
-						<!-- Single-line: type · author · meta chips -->
-						<div class="meme-source-row">
-							<span class="meme-type">{embed.type}
-								{#if sm.extra_count > 0}<span class="dup-badge">×{sm.extra_count + 1}</span>{/if}
-							</span>
-							<span class="meme-author">by {session.participants.find(p => p.id === sm.meme.user_id)?.display_name || '?'}</span>
-							{#if mediaStatus[String(sm.meme.id)]?.meta}
-								{@const meta = mediaStatus[String(sm.meme.id)].meta}
-								{#if meta.uploader}<span class="meta-chip meta-uploader">👤 {meta.uploader}</span>{/if}
-								{#if meta.view_count}<span class="meta-chip">👁 {meta.view_count >= 1_000_000 ? (meta.view_count/1_000_000).toFixed(1)+'M' : meta.view_count >= 1_000 ? (meta.view_count/1_000).toFixed(0)+'K' : meta.view_count}</span>{/if}
-								{#if meta.like_count}<span class="meta-chip">❤️ {meta.like_count >= 1_000_000 ? (meta.like_count/1_000_000).toFixed(1)+'M' : meta.like_count >= 1_000 ? (meta.like_count/1_000).toFixed(0)+'K' : meta.like_count}</span>{/if}
-								{#if meta.comment_count}<span class="meta-chip">💬 {meta.comment_count >= 1_000 ? (meta.comment_count/1_000).toFixed(0)+'K' : meta.comment_count}</span>{/if}
-								{#if meta.duration}<span class="meta-chip">⏱ {meta.duration >= 60 ? Math.floor(meta.duration/60)+'m' + (meta.duration%60 > 0 ? (meta.duration%60)+'s' : '') : meta.duration+'s'}</span>{/if}
-							{/if}
-						</div>
+						<!-- HUD bar -->
+						<div class="glass-strong sesh-hud">
 
-						{#key sm.meme.id}
-						{#if embed.type === 'youtube' && embed.embedUrl}
-							<iframe
-								src={embed.embedUrl}
-								title="YouTube"
-								allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope"
-								allowfullscreen={true}
-								class="embed-frame"
-							></iframe>
-						{:else if embed.type === 'tiktok' && mediaStatus[String(sm.meme.id)]?.status === 'ready'}
-							<div class="sync-media-wrap">
-								<!-- Local download — plain <video> bypasses all autoplay/iframe restrictions -->
-								<video
-									src="/api/sessions/{session.id}/media/{sm.meme.id}?token={authVal.token}"
-									controls
-									class="embed-frame tiktok-frame local-video"
-									use:localVideoSync
-								></video>
-								{#if localVideoMuted}
-									<button class="unmute-overlay" onclick={() => { if (localVideoEl) { localVideoEl.muted = false; } }}>
-										🔇 Haz clic para activar el sonido
-									</button>
-								{/if}
-							</div>
-						{:else if embed.type === 'tiktok' && embed.embedUrl}
-							<div class="sync-media-wrap">
-								{#if mediaStatus[String(sm.meme.id)]?.status === 'pending'}
-									<div class="media-loading">⏬ Cargando vídeo local…</div>
-								{:else if mediaStatus[String(sm.meme.id)]?.status === 'slideshow'}
-									<div class="media-loading slideshow-badge">🖼️ Slideshow de imágenes</div>
-								{/if}
-								<iframe
-									src={embed.embedUrl}
-									title="TikTok"
-									allow="autoplay; fullscreen; encrypted-media"
-									allowfullscreen={true}
-									class="embed-frame tiktok-frame"
-								></iframe>
-							</div>
-						{:else if embed.type === 'instagram' && embed.embedUrl}
-							<iframe
-								src={embed.embedUrl}
-								title="Instagram"
-								allowfullscreen={true}
-								class="embed-frame instagram-frame"
-							></iframe>
-						{:else if embed.type === 'twitter' && mediaStatus[String(sm.meme.id)]?.status === 'ready'}
-							<div class="sync-media-wrap">
-								<video
-									src="/api/sessions/{session.id}/media/{sm.meme.id}?token={authVal.token}"
-									controls
-									class="embed-frame local-video"
-									use:localVideoSync
-								></video>
-								{#if localVideoMuted}
-									<button class="unmute-overlay" onclick={() => { if (localVideoEl) { localVideoEl.muted = false; } }}>
-										🔇 Haz clic para activar el sonido
-									</button>
-								{/if}
-							</div>
-						{:else if embed.type === 'twitter'}
-							<div class="sync-media-wrap">
-								{#if mediaStatus[String(sm.meme.id)]?.status === 'pending'}
-									<div class="media-loading">⏬ Cargando vídeo local…</div>
-								{/if}
-								{#if twitterEmbeds[sm.meme.id]}
-									<!-- eslint-disable-next-line svelte/no-at-html-tags -->
-									<div class="twitter-embed-wrap" use:tweetWidget>{@html twitterEmbeds[sm.meme.id]}</div>
-								{:else if twitterEmbeds[sm.meme.id] === null}
-									<div class="twitter-embed">
-										<p class="tweet-hint">No se pudo cargar el tweet.</p>
-										<a href={sm.meme.url} target="_blank" rel="noopener noreferrer" class="btn-secondary open-btn">
-											🐦 Abrir en Twitter/X
-										</a>
-									</div>
-								{:else}
-									<div class="twitter-embed">
-										<p class="tweet-hint">Cargando tweet…</p>
-									</div>
-								{/if}
-							</div>
-						{:else if embed.type === 'image'}
-							<img src={sm.meme.url} alt="meme" class="meme-img" />
-						{:else}
-							<a href={sm.meme.url} target="_blank" rel="noopener noreferrer" class="meme-link">
-								🔗 Abrir {embed.type}
-							</a>
-						{/if}
-						{/key}
-
-						{#if true}
-						{@const totalMemes = session.session_memes.length}
-						{@const sliderVal = myVote?.value ?? null}
-						{@const rankPct = sliderVal !== null ? sliderVal / totalMemes : null}
-						{@const usedOther = getUsedOtherScores(sm.meme.id)}
-						<div class="voting">
-							<div class="rank-slider-full">
-								<div class="rank-labels">
-									<span>💀 Peor</span>
-									<span>🏆 Mejor</span>
-								</div>
-								<div class="rank-slider-track">
-									{#if sliderVal !== null}
-										<div class="rank-badge" style="left: {rankPct * 100}%">{sliderVal}</div>
+							<!-- Row 1: platform glyph + title/meta -->
+							<div class="hud-row hud-meta-row">
+								<span class="hud-plat-glyph" style="color:{PLAT.c}">{PLAT.g}</span>
+								<div class="hud-info">
+									{#if smeta?.title}
+										<div class="hud-title">{smeta.title}</div>
 									{/if}
-									<input
-										type="range"
-										min="0"
-										max={totalMemes}
-										value={sliderVal ?? Math.round(totalMemes / 2)}
-										class="rank-slider"
-										onchange={(e) => {
-											const resolved = resolveScore(+e.target.value, sm.meme.id, totalMemes);
-											e.target.value = resolved;
-											castVote(sm.meme.id, resolved);
-										}}
-									/>
-									<!-- Other users' votes as dots with initial -->
-									{#each votes.filter(v => v.meme_id === sm.meme.id && v.user_id !== authVal.user?.id) as ov}
-										{@const participant = session.participants.find(p => p.id === ov.user_id)}
-										<span
-											class="other-vote-dot"
-											title="{participant?.display_name}: {ov.value}/{totalMemes}"
-											style="left: {(ov.value / totalMemes) * 100}%"
-										><span class="other-vote-initial">{participant?.display_name?.slice(0,1) ?? '?'}</span></span>
-									{/each}
-									<!-- Taken score ticks (used in other memes by this user) -->
-									{#each [...usedOther] as taken}
-										<span class="taken-tick" style="left: {(taken / totalMemes) * 100}%"></span>
-									{/each}
+									<div class="hud-sub">
+										<span>by {session.participants.find(p => p.id === sm.meme.user_id)?.display_name || '?'}</span>
+										{#if sm.extra_count > 0}<span class="dup-badge">×{sm.extra_count + 1}</span>{/if}
+										{#if smeta?.uploader}<span class="meta-chip meta-uploader">👤 {smeta.uploader}</span>{/if}
+										{#if smeta?.view_count}<span class="meta-chip">👁 {smeta.view_count >= 1_000_000 ? (smeta.view_count/1_000_000).toFixed(1)+'M' : smeta.view_count >= 1_000 ? (smeta.view_count/1_000).toFixed(0)+'K' : smeta.view_count}</span>{/if}
+										{#if smeta?.like_count}<span class="meta-chip">❤️ {smeta.like_count >= 1_000_000 ? (smeta.like_count/1_000_000).toFixed(1)+'M' : smeta.like_count >= 1_000 ? (smeta.like_count/1_000).toFixed(0)+'K' : smeta.like_count}</span>{/if}
+										{#if smeta?.comment_count}<span class="meta-chip">💬 {smeta.comment_count >= 1_000 ? (smeta.comment_count/1_000).toFixed(0)+'K' : smeta.comment_count}</span>{/if}
+										{#if smeta?.duration}<span class="meta-chip">⏱ {smeta.duration >= 60 ? Math.floor(smeta.duration/60)+'m' + (smeta.duration%60 > 0 ? (smeta.duration%60)+'s' : '') : smeta.duration+'s'}</span>{/if}
+									</div>
+								</div>
+								<div class="hud-right-chips">
+									<span class="chip chip-teal sh-live-chip">
+										<span class="live-dot"></span>LIVE
+									</span>
+									<span class="eyebrow" style="font-size:0.6rem;white-space:nowrap">{currentIndex + 1}/{session.session_memes.length}</span>
 								</div>
 							</div>
-							{#if sliderVal === null}
-								<p class="rank-hint">Desliza para posicionar este meme</p>
-							{:else}
-								<p class="rank-hint">
-									Posición <strong>{sliderVal}</strong> de {totalMemes}
-									· {#if rankPct < 0.25}💀 fondo
-									{:else if rankPct < 0.5}😐 medio-bajo
-									{:else if rankPct < 0.75}😄 medio-alto
-									{:else}🔥 top
-									{/if}
-								</p>
-							{/if}
-						</div>
 
-						<!-- Superfav auto-trigger: if all voted max, show ⭐ flash -->
-						{#if (() => {
-							const mVotes = votes.filter(v => v.meme_id === sm.meme.id);
-							const total = session.session_memes.length;
-							return mVotes.length >= session.participants.length && mVotes.every(v => v.value === total);
-						})()}
-							<div class="superfav-flash">⭐ ¡SUPER FAVORITO!</div>
-						{/if}
-
-					{/if}
-					</div><!-- /card meme-display -->
-
-					<!-- Right panel: next nav + vote indicators + notepad + kofi -->
-					<div class="right-panel">
-						<div class="nav-side-wrap">
-							{#if currentIndex === session.session_memes.length - 1}
-								<button class="nav-side nav-side-rank" onclick={showRanking} title="Ver ranking">📊</button>
-							{:else}
-								<button
-									class="nav-side"
-									class:nav-ready={nextVoters.includes(authVal.user?.id)}
-									onclick={voteNext}
-									title="Siguiente"
-								>›</button>
-								<div class="next-vote-dots">
-									{#each session.participants as p}
-										<div class="next-vote-item" class:voted={nextVoters.includes(p.id)}>
-											<span class="next-vote-dot" class:voted={nextVoters.includes(p.id)}></span>
-											<span class="next-vote-name">{p.display_name.slice(0, 8)}</span>
-										</div>
-									{/each}
+							<!-- Row 2: vote slider -->
+							<div class="hud-row hud-vote-row">
+								<div class="hud-vote-label-group">
+									<span style="font-size:0.9rem">💀</span>
+									<span class="hud-vote-num">{sliderVal ?? '–'}</span>
+									<span style="font-size:0.9rem">🏆</span>
 								</div>
-							{/if}
-						</div>
+								<div class="hud-slider-wrap">
+									<div class="rank-slider-track">
+										{#if sliderVal !== null}
+											<div class="rank-badge" style="left: {rankPct * 100}%">{sliderVal}</div>
+										{/if}
+										<input
+											type="range"
+											min="0"
+											max={totalMemes}
+											value={sliderVal ?? Math.round(totalMemes / 2)}
+											class="rank-slider"
+											onchange={(e) => {
+												const resolved = resolveScore(+e.target.value, sm.meme.id, totalMemes);
+												e.target.value = resolved;
+												castVote(sm.meme.id, resolved);
+											}}
+										/>
+										{#each votes.filter(v => v.meme_id === sm.meme.id && v.user_id !== authVal.user?.id) as ov}
+											{@const participant = session.participants.find(p => p.id === ov.user_id)}
+											<span class="other-vote-dot" title="{participant?.display_name}: {ov.value}/{totalMemes}" style="left: {(ov.value / totalMemes) * 100}%">
+												<span class="other-vote-initial">{participant?.display_name?.slice(0,1) ?? '?'}</span>
+											</span>
+										{/each}
+										{#each [...usedOther] as taken}
+											<span class="taken-tick" style="left: {(taken / totalMemes) * 100}%"></span>
+										{/each}
+									</div>
+									<!-- Who has voted -->
+									<div class="hud-who-voted">
+										{#each session.participants as p}
+											{@const voted = votes.some(v => v.meme_id === sm.meme.id && v.user_id === p.id)}
+											<div class="voted-avatar" class:voted-done={voted} title="{p.display_name}{voted ? ' ✓' : ''}">
+												{p.display_name.slice(0,2).toUpperCase()}
+											</div>
+										{/each}
+									</div>
+								</div>
+							</div>
 
-					</div>
+							<!-- Row 3: fun buttons + sidebar toggle -->
+							<div class="hud-row hud-transport-row">
+								{#each FUN_BUTTONS as emoji}
+									<button class="fun-btn" onclick={() => sendFunTap(emoji)} title={emoji}>{emoji}</button>
+								{/each}
+								<div class="hud-spacer"></div>
+								<button class="btn-glass hud-notepad-btn" class:hud-notepad-active={noteVisible} onclick={() => (noteVisible = !noteVisible)}>📝 Sidebar</button>
+							</div>
 
-					<!-- Notepad sidebar: participants + reactions + notepad -->
+						</div><!-- /sesh-hud -->
+
+					</div><!-- /sesh-main -->
+
+					<!-- ── Sidebar column ── -->
 					{#if noteVisible}
-						<div class="notepad-panel">
-							<!-- Participants card -->
+						<div class="sesh-sidebar">
+
+							<!-- Participants -->
 							<div class="sidebar-card">
 								<div class="sidebar-card-header">
 									<span class="eyebrow" style="font-size:0.6rem">En la sala</span>
 									<span class="chip chip-teal" style="font-size:0.65rem;padding:0.15rem 0.55rem;display:inline-flex;align-items:center;gap:5px">
-										<span class="live-dot"></span>
-										{connectedUsers} online
+										<span class="live-dot"></span>{connectedUsers} online
 									</span>
 								</div>
 								<div class="participants-list">
@@ -1475,23 +1442,18 @@
 								</div>
 							</div>
 
-							<!-- Reactions card -->
+							<!-- Reactions -->
 							<div class="sidebar-card">
 								<div class="sidebar-card-header">
 									<span class="eyebrow" style="font-size:0.6rem">Reacciones</span>
 									<span class="chip" style="font-size:0.65rem;padding:0.15rem 0.55rem;display:inline-flex;align-items:center;gap:5px">
-										<span class="live-dot" style="background:var(--teal);box-shadow:0 0 6px var(--teal)"></span>
-										live
+										<span class="live-dot" style="background:var(--teal);box-shadow:0 0 6px var(--teal)"></span>live
 									</span>
 								</div>
 								<div class="reactions-grid">
 									{#each FUN_BUTTONS as emoji}
 										{@const count = emojiCounts[emoji] || 0}
-										<button
-											class="reaction-btn"
-											class:reaction-active={count > 0}
-											onclick={() => sendFunTap(emoji)}
-										>
+										<button class="reaction-btn" class:reaction-active={count > 0} onclick={() => sendFunTap(emoji)}>
 											<span>{emoji}</span>
 											{#if count > 0}<span class="reaction-count">{count}</span>{/if}
 										</button>
@@ -1505,33 +1467,20 @@
 									<span class="eyebrow" style="font-size:0.6rem">📝 Notepad compartido</span>
 									<div style="display:flex;align-items:center;gap:0.5rem">
 										<span class="chip" style="font-size:0.65rem;padding:0.15rem 0.55rem;display:inline-flex;align-items:center;gap:4px">
-											<span class="live-dot" style="background:var(--teal);box-shadow:0 0 6px var(--teal)"></span>
-											sync
+											<span class="live-dot" style="background:var(--teal);box-shadow:0 0 6px var(--teal)"></span>sync
 										</span>
 										<button class="notepad-close" onclick={() => (noteVisible = false)}>✕</button>
 									</div>
 								</div>
-								<textarea
-									class="notepad-textarea"
-									bind:value={noteText}
-									oninput={(e) => sendNote(e.target.value)}
-									placeholder="Apunta los momentazos, frases míticas, ideas…"
-								></textarea>
+								<textarea class="notepad-textarea" bind:value={noteText} oninput={(e) => sendNote(e.target.value)} placeholder="Apunta los momentazos, frases míticas, ideas…"></textarea>
 							</div>
 
-							<a
-								href="https://ko-fi.com/Z8Z81OW7UV"
-								target="_blank"
-								rel="noopener noreferrer"
-								class="kofi-link-panel"
-								title="Invítame un café ☕"
-							>☕</a>
-						</div>
-					{/if}
-				</div><!-- /meme-and-nav -->
+							<a href="https://ko-fi.com/Z8Z81OW7UV" target="_blank" rel="noopener noreferrer" class="kofi-link-panel" title="Invítame un café ☕">☕</a>
 
-				</div><!-- /presentation -->
-				</div><!-- /presentation-wrap -->
+						</div><!-- /sesh-sidebar -->
+					{/if}
+
+				</div><!-- /sesh-grid -->
 			{/if}
 		{/if}
 
@@ -3287,7 +3236,8 @@
 		color: var(--coral-bright);
 	}
 
-	.notepad-panel .notepad-textarea {
+	.notepad-panel .notepad-textarea,
+	.sesh-sidebar .notepad-textarea {
 		flex: 1;
 		min-height: 160px;
 	}
@@ -3832,5 +3782,368 @@
 		.rv-rank-votes { display: none; } /* hide per-user chips on mobile to save space */
 		.rv-stats { gap: 1rem; }
 		.rv-stat-num { font-size: 1.4rem; }
+	}
+
+	/* ══════════════════════════════════════════
+	   NEW PRESENTATION GRID LAYOUT
+	══════════════════════════════════════════ */
+
+	/* Grid wrapper */
+	.sesh-grid {
+		display: grid;
+		grid-template-columns: 1fr;
+		gap: 0.6rem;
+		width: 100%;
+	}
+	.sesh-with-sidebar {
+		grid-template-columns: 1fr 320px;
+	}
+
+	/* Main column */
+	.sesh-main {
+		display: flex;
+		flex-direction: column;
+		gap: 0.45rem;
+		min-width: 0;
+	}
+
+	/* Video area: arrows + stage */
+	.sesh-video-area {
+		display: flex;
+		align-items: stretch;
+		gap: 0.5rem;
+		min-height: calc(100dvh - 300px);
+	}
+
+	/* Nav arrows */
+	.nav-arrow {
+		width: 44px;
+		min-height: 52px;
+		align-self: stretch;
+		flex-shrink: 0;
+		border-radius: 14px;
+		background: rgba(255,255,255,0.05);
+		border: 1px solid var(--glass-border);
+		color: var(--text);
+		font-size: 1.6rem;
+		line-height: 1;
+		cursor: pointer;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		transition: background 0.15s, transform 0.1s;
+		font-family: inherit;
+	}
+	.nav-arrow:hover:not(:disabled) { background: rgba(255,255,255,0.1); transform: scale(1.05); }
+	.nav-arrow:disabled { opacity: 0.2; cursor: not-allowed; }
+	.nav-arrow.nav-ready {
+		background: rgba(94,227,210,0.15);
+		border-color: rgba(94,227,210,0.4);
+		color: var(--teal);
+	}
+	.nav-rank-btn { font-size: 1.15rem; }
+
+	/* Video stage */
+	.video-stage {
+		flex: 1;
+		min-width: 0;
+		align-self: stretch;
+		border-radius: 18px;
+		background: rgba(0,0,0,0.35);
+		border: 1px solid var(--glass-border);
+		box-shadow: 0 8px 48px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.05);
+		overflow: hidden;
+		position: relative;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+	}
+	.video-vertical {
+		max-width: min(100%, calc((100dvh - 280px) * 9 / 16));
+		margin: 0 auto;
+	}
+	.stage-embed {
+		width: 100%;
+		height: 100%;
+		border: none;
+		display: block;
+		object-fit: contain;
+	}
+	.stage-embed-wrap {
+		width: 100%;
+		height: 100%;
+		position: relative;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+	}
+	.stage-video {
+		width: 100%;
+		height: 100%;
+		object-fit: contain;
+		display: block;
+	}
+	.stage-image {
+		max-width: 100%;
+		max-height: 100%;
+		object-fit: contain;
+		display: block;
+		border-radius: 4px;
+	}
+	.stage-link {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		gap: 1.25rem;
+		height: 100%;
+		color: var(--text-muted);
+		padding: 2rem;
+	}
+
+	/* SYNCED badge */
+	.synced-badge {
+		position: absolute;
+		top: 10px;
+		left: 10px;
+		z-index: 5;
+		display: inline-flex;
+		align-items: center;
+		gap: 5px;
+		background: rgba(94,227,210,0.12);
+		border: 1px solid rgba(94,227,210,0.3);
+		border-radius: 8px;
+		padding: 3px 10px;
+		font-size: 0.62rem;
+		font-weight: 700;
+		letter-spacing: 0.12em;
+		color: var(--teal);
+		font-family: var(--font-mono);
+		pointer-events: none;
+	}
+	.synced-dot {
+		width: 6px;
+		height: 6px;
+		border-radius: 50%;
+		background: var(--teal);
+		box-shadow: 0 0 6px var(--teal);
+		animation: statusPulse 1.4s ease-in-out infinite;
+	}
+
+	/* Superfav flash inside stage */
+	.superfav-stage-flash {
+		position: absolute;
+		top: 50%;
+		left: 50%;
+		transform: translate(-50%, -50%);
+		z-index: 10;
+		font-size: 1.3rem;
+		font-weight: 800;
+		background: linear-gradient(135deg, rgba(255,200,0,0.92), rgba(255,140,0,0.92));
+		border-radius: 14px;
+		padding: 0.5rem 1.3rem;
+		color: #fff;
+		white-space: nowrap;
+		animation: superfavPop 0.3s cubic-bezier(0.175,0.885,0.32,1.275);
+		pointer-events: none;
+		box-shadow: 0 8px 32px rgba(255,180,0,0.4);
+	}
+	@keyframes superfavPop {
+		from { transform: translate(-50%,-50%) scale(0.6); opacity: 0; }
+		to   { transform: translate(-50%,-50%) scale(1);   opacity: 1; }
+	}
+
+	/* Unmute overlay inside stage */
+	.unmute-stage {
+		position: absolute;
+		bottom: 14px;
+		left: 50%;
+		transform: translateX(-50%);
+		z-index: 10;
+		background: rgba(0,0,0,0.72);
+		border: 1px solid rgba(255,255,255,0.14);
+		border-radius: 20px;
+		color: var(--text);
+		padding: 0.38rem 1rem;
+		font-size: 0.82rem;
+		cursor: pointer;
+		font-family: inherit;
+		white-space: nowrap;
+		transition: background 0.15s;
+	}
+	.unmute-stage:hover { background: rgba(0,0,0,0.9); }
+
+	/* Next-voters row */
+	.next-voters-row {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 0.85rem;
+		flex-shrink: 0;
+		min-height: 28px;
+	}
+	.nv-item {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 3px;
+		opacity: 0.3;
+		transition: opacity 0.2s;
+	}
+	.nv-item.nv-voted { opacity: 1; }
+	.nv-dot {
+		width: 8px;
+		height: 8px;
+		border-radius: 50%;
+		background: rgba(255,255,255,0.2);
+		border: 1px solid rgba(255,255,255,0.12);
+		transition: background 0.2s, box-shadow 0.2s;
+	}
+	.nv-item.nv-voted .nv-dot {
+		background: var(--teal);
+		box-shadow: 0 0 8px var(--teal);
+	}
+	.nv-name {
+		font-size: 0.56rem;
+		color: var(--text-muted);
+		font-family: var(--font-mono);
+		letter-spacing: 0.03em;
+	}
+
+	/* HUD bar */
+	.sesh-hud {
+		border-radius: 16px;
+		padding: 0.55rem 0.9rem;
+		display: flex;
+		flex-direction: column;
+		gap: 0.45rem;
+		flex-shrink: 0;
+	}
+	.hud-row {
+		display: flex;
+		align-items: center;
+		gap: 0.7rem;
+	}
+	.hud-meta-row { align-items: flex-start; }
+	.hud-plat-glyph {
+		font-size: 1.35rem;
+		flex-shrink: 0;
+		line-height: 1;
+		margin-top: 1px;
+	}
+	.hud-info {
+		flex: 1;
+		min-width: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 0.18rem;
+	}
+	.hud-title {
+		font-size: 0.86rem;
+		font-weight: 700;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		letter-spacing: -0.01em;
+	}
+	.hud-sub {
+		display: flex;
+		align-items: center;
+		gap: 0.35rem;
+		flex-wrap: wrap;
+		font-size: 0.74rem;
+		color: var(--text-muted);
+	}
+	.hud-right-chips {
+		display: flex;
+		align-items: center;
+		gap: 0.45rem;
+		flex-shrink: 0;
+		margin-left: auto;
+	}
+	.hud-vote-row { align-items: center; }
+	.hud-vote-label-group {
+		display: flex;
+		align-items: center;
+		gap: 0.4rem;
+		flex-shrink: 0;
+	}
+	.hud-vote-num {
+		font-size: 1.25rem;
+		font-weight: 800;
+		font-family: var(--font-mono);
+		letter-spacing: -0.04em;
+		min-width: 2.2ch;
+		text-align: center;
+	}
+	.hud-slider-wrap {
+		flex: 1;
+		display: flex;
+		flex-direction: column;
+		gap: 0.3rem;
+	}
+	.hud-who-voted {
+		display: flex;
+		gap: 0.28rem;
+		align-items: center;
+	}
+	.voted-avatar {
+		width: 22px;
+		height: 22px;
+		border-radius: 7px;
+		background: rgba(255,255,255,0.07);
+		border: 1px solid rgba(255,255,255,0.1);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		font-size: 0.52rem;
+		font-weight: 800;
+		color: var(--text-muted);
+		transition: background 0.2s, border-color 0.2s, color 0.2s;
+		font-family: var(--font-mono);
+	}
+	.voted-avatar.voted-done {
+		background: rgba(94,227,210,0.18);
+		border-color: rgba(94,227,210,0.4);
+		color: var(--teal);
+	}
+	.hud-transport-row { gap: 0.35rem; }
+	.hud-spacer { flex: 1; }
+	.hud-notepad-btn { font-size: 0.8rem; padding: 0.32rem 0.7rem; }
+	.hud-notepad-active {
+		background: rgba(94,227,210,0.1) !important;
+		border-color: rgba(94,227,210,0.35) !important;
+		color: var(--teal) !important;
+	}
+
+	/* Sidebar column */
+	.sesh-sidebar {
+		display: flex;
+		flex-direction: column;
+		gap: 0.55rem;
+		max-height: calc(100dvh - 160px);
+		overflow-y: auto;
+		overflow-x: hidden;
+		scrollbar-width: thin;
+		position: sticky;
+		top: 1rem;
+		align-self: flex-start;
+	}
+	.sesh-sidebar .notepad-textarea {
+		flex: 1;
+		min-height: 110px;
+	}
+
+	/* Responsive */
+	@media (max-width: 900px) {
+		.sesh-with-sidebar { grid-template-columns: 1fr; }
+		.sesh-sidebar { position: static; max-height: 50vh; }
+		.sesh-video-area { min-height: 42dvh; }
+	}
+	@media (max-width: 600px) {
+		.nav-arrow { width: 36px; height: 44px; font-size: 1.3rem; }
+		.sesh-hud { padding: 0.45rem 0.65rem; }
+		.hud-plat-glyph { font-size: 1.1rem; }
+		.sesh-video-area { min-height: 38dvh; }
 	}
 </style>
