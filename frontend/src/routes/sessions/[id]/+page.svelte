@@ -866,7 +866,7 @@
 
 	// ── Shared notepad ────────────────────────────────────────────────────────
 	let noteText = $state('');
-	let noteVisible = $state(false);
+	let noteVisible = $state(true);
 	let _noteSendTimer = null;
 	function sendNote(text) {
 		if (_noteSendTimer) clearTimeout(_noteSendTimer);
@@ -4020,6 +4020,20 @@
 		min-height: 0;
 		width: 36px;
 	}
+	/* Gradient track drawn with a pseudo-element (unaffected by writing-mode rotation) */
+	.sl-track-wrap::before {
+		content: '';
+		position: absolute;
+		left: 50%;
+		top: 0;
+		width: 6px;
+		height: 100%;
+		transform: translateX(-50%);
+		border-radius: 999px;
+		background: linear-gradient(to top, #ff3b3b, #ffb800, #2bd4a7);
+		pointer-events: none;
+		z-index: 0;
+	}
 	/* Vertical range input */
 	.sl-range-v {
 		writing-mode: vertical-lr;
@@ -4029,11 +4043,13 @@
 		width: 6px;
 		height: 100%;
 		cursor: pointer;
-		background: linear-gradient(to top, #ff3b3b, #ffb800, #2bd4a7);
+		background: transparent;
 		border-radius: 999px;
 		outline: none;
 		border: none;
 		flex-shrink: 0;
+		position: relative;
+		z-index: 1;
 	}
 	.sl-range-v::-webkit-slider-thumb {
 		-webkit-appearance: none;
