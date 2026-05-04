@@ -1259,7 +1259,52 @@
 						</button>
 					</div>
 
-					<!-- Left HUD column -->
+					<!-- Vote bar: full-width horizontal row -->
+					<div class="pres-votebar glass-strong sesh-full-row">
+						<span class="pvb-emoji">💀</span>
+						<div class="pvb-track-wrap rank-slider-track">
+							{#if sliderVal !== null}
+								<div class="rank-badge pvb-badge" style="left:{rankPct * 100}%">{sliderVal}</div>
+							{/if}
+							<input
+								type="range"
+								min="0"
+								max={totalMemes}
+								value={sliderVal ?? Math.round(totalMemes / 2)}
+								class="rank-slider pvb-slider"
+								onchange={(e) => {
+									const resolved = resolveScore(+e.target.value, sm.meme.id, totalMemes);
+									e.target.value = resolved;
+									castVote(sm.meme.id, resolved);
+								}}
+							/>
+							{#each votes.filter(v => v.meme_id === sm.meme.id && v.user_id !== myId) as ov}
+								{@const participant = session.participants.find(p => p.id === ov.user_id)}
+								<span class="other-vote-dot" title="{participant?.display_name}: {ov.value}/{totalMemes}" style="left:{(ov.value/totalMemes)*100}%">
+									<span class="other-vote-initial">{participant?.display_name?.slice(0,1)??'?'}</span>
+								</span>
+							{/each}
+							{#each [...usedOther] as taken}
+								<span class="taken-tick" style="left:{(taken/totalMemes)*100}%"></span>
+							{/each}
+						</div>
+						<span class="pvb-emoji">🏆</span>
+						<div class="pvb-score">
+							<span class="pvb-num" class:pvb-num-active={sliderVal !== null}>{sliderVal ?? '—'}</span>
+							<span class="pvb-denom">/{totalMemes}</span>
+						</div>
+						<div class="pvb-voters">
+							{#each session.participants as p}
+								{@const voted = votes.some(v => v.meme_id === sm.meme.id && v.user_id === p.id)}
+								<div class="voted-avatar" class:voted-done={voted} title="{p.display_name}{voted?'  ✓':''}">
+									{p.display_name.slice(0,2).toUpperCase()}
+									{#if voted}<span class="voted-check">✓</span>{/if}
+								</div>
+							{/each}
+						</div>
+					</div>
+
+					<!-- Left HUD column: meta + transport only -->
 					<div class="sesh-left glass-strong">
 
 						<!-- Meta: platform + title + stats + submitter -->
@@ -1287,59 +1332,6 @@
 								<span class="hud-submitter-init">{(session.participants.find(p=>p.id===sm.meme.user_id)?.display_name??'?').slice(0,2).toUpperCase()}</span>
 								<span class="sl-submitter-name">{session.participants.find(p=>p.id===sm.meme.user_id)?.display_name||'?'}</span>
 								{#if sm.extra_count > 0}<span class="chip chip-coral" style="font-size:0.65rem">×{sm.extra_count+1}</span>{/if}
-							</div>
-						</div>
-
-						<!-- Vertical vote slider -->
-						<div class="sl-vote">
-							<div class="sl-vote-top">
-								<span class="eyebrow" style="font-size:0.6rem">Tu voto</span>
-								<div class="sl-vote-display">
-									<span class="sl-vote-num" class:sl-vote-active={sliderVal !== null}>{sliderVal ?? '—'}</span>
-									<span class="sl-vote-denom">/{totalMemes}</span>
-								</div>
-							</div>
-
-							<div class="sl-track-area">
-								<span class="sl-emoji-label">🏆</span>
-								<div class="sl-track-wrap">
-									<!-- Gradient track: writing-mode reset inline -->
-									<div class="sl-track-visual" style="writing-mode:horizontal-tb"></div>
-									<input
-										type="range"
-										orient="vertical"
-										min="0"
-										max={totalMemes}
-										value={sliderVal ?? Math.round(totalMemes / 2)}
-										class="rank-slider sl-range-v"
-										onchange={(e) => {
-											const resolved = resolveScore(+e.target.value, sm.meme.id, totalMemes);
-											e.target.value = resolved;
-											castVote(sm.meme.id, resolved);
-										}}
-									/>
-									<!-- Other users' votes as side dots -->
-									{#each votes.filter(v => v.meme_id === sm.meme.id && v.user_id !== myId) as ov}
-										{@const participant = session.participants.find(p => p.id === ov.user_id)}
-										<span
-											class="other-vote-dot-v"
-											style="bottom:{(ov.value/totalMemes)*100}%"
-											title="{participant?.display_name}: {ov.value}/{totalMemes}"
-										>{participant?.display_name?.slice(0,1)??'?'}</span>
-									{/each}
-								</div>
-								<span class="sl-emoji-label">💀</span>
-							</div>
-
-							<!-- Who voted -->
-							<div class="hud-who-voted sl-who-voted">
-								{#each session.participants as p}
-									{@const voted = votes.some(v => v.meme_id === sm.meme.id && v.user_id === p.id)}
-									<div class="voted-avatar" class:voted-done={voted} title="{p.display_name}{voted?'  ✓':''}">
-										{p.display_name.slice(0,2).toUpperCase()}
-										{#if voted}<span class="voted-check">✓</span>{/if}
-									</div>
-								{/each}
 							</div>
 						</div>
 
@@ -3903,11 +3895,11 @@
 		overflow: hidden;
 	}
 
-	/* Grid wrapper — 3 cols: left-hud | video | (sidebar) */
+	/* Grid wrapper — 3 cols: left-hud | video | (sidebar), 3 rows: topbar | votebar | content */
 	.sesh-grid {
 		display: grid;
 		grid-template-columns: 220px 1fr;
-		grid-template-rows: auto 1fr;
+		grid-template-rows: auto auto 1fr;
 		gap: 0.6rem;
 		height: 100%;
 	}
@@ -3917,6 +3909,59 @@
 	/* Topbar spans all columns */
 	.sesh-full-row {
 		grid-column: 1 / -1;
+	}
+
+	/* Full-width horizontal vote bar (row 2) */
+	.pres-votebar {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+		padding: 0.55rem 1rem;
+		border-radius: 14px;
+		flex-shrink: 0;
+	}
+	.pvb-emoji { font-size: 1.1rem; flex-shrink: 0; }
+	.pvb-track-wrap {
+		flex: 1;
+		min-width: 0;
+		position: relative;
+		height: 36px;
+		display: flex;
+		align-items: center;
+	}
+	.pvb-slider {
+		width: 100%;
+		height: 100%;
+		position: relative;
+		z-index: 1;
+	}
+	.pvb-badge {
+		position: absolute;
+		top: -28px;
+		transform: translateX(-50%);
+	}
+	.pvb-score {
+		display: flex;
+		align-items: baseline;
+		gap: 2px;
+		flex-shrink: 0;
+	}
+	.pvb-num {
+		font-size: 1.6rem;
+		font-weight: 800;
+		font-family: var(--font-mono);
+		letter-spacing: -0.04em;
+		line-height: 1;
+		color: rgba(255,255,255,0.2);
+		transition: color 0.2s;
+	}
+	.pvb-num.pvb-num-active { color: var(--coral-bright); }
+	.pvb-denom { font-size: 0.8rem; color: var(--text-muted); font-family: var(--font-mono); }
+	.pvb-voters {
+		display: flex;
+		gap: 0.25rem;
+		align-items: center;
+		flex-shrink: 0;
 	}
 
 	/* Left HUD column */
