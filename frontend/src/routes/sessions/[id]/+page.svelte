@@ -1303,8 +1303,17 @@
 							<div class="sl-track-area">
 								<span class="sl-emoji-label">🏆</span>
 								<div class="sl-track-wrap">
-									<!-- Gradient track (plain div, unaffected by writing-mode) -->
-									<div class="sl-track-visual"></div>
+									<!-- SVG gradient track — writing-mode immune -->
+									<svg class="sl-track-svg" preserveAspectRatio="none">
+										<defs>
+											<linearGradient id="vg-{sm.meme.id}" gradientUnits="objectBoundingBox" x1="0" y1="1" x2="0" y2="0">
+												<stop offset="0%" stop-color="#ff3b3b"/>
+												<stop offset="50%" stop-color="#ffb800"/>
+												<stop offset="100%" stop-color="#2bd4a7"/>
+											</linearGradient>
+										</defs>
+										<rect width="100%" height="100%" rx="3" ry="3" fill="url(#vg-{sm.meme.id})"/>
+									</svg>
 									<input
 										type="range"
 										orient="vertical"
