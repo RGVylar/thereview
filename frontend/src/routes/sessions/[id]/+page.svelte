@@ -1303,17 +1303,8 @@
 							<div class="sl-track-area">
 								<span class="sl-emoji-label">🏆</span>
 								<div class="sl-track-wrap">
-									<!-- SVG gradient track — writing-mode immune -->
-									<svg class="sl-track-svg" preserveAspectRatio="none">
-										<defs>
-											<linearGradient id="vg-{sm.meme.id}" gradientUnits="objectBoundingBox" x1="0" y1="1" x2="0" y2="0">
-												<stop offset="0%" stop-color="#ff3b3b"/>
-												<stop offset="50%" stop-color="#ffb800"/>
-												<stop offset="100%" stop-color="#2bd4a7"/>
-											</linearGradient>
-										</defs>
-										<rect width="100%" height="100%" rx="3" ry="3" fill="url(#vg-{sm.meme.id})"/>
-									</svg>
+									<!-- Gradient track: writing-mode reset inline -->
+									<div class="sl-track-visual" style="writing-mode:horizontal-tb"></div>
 									<input
 										type="range"
 										orient="vertical"
@@ -4030,18 +4021,22 @@
 		justify-content: center;
 		min-height: 0;
 		width: 36px;
+		writing-mode: horizontal-tb; /* block inheritance from parent context */
 	}
-	/* SVG gradient track — SVG coordinate system is writing-mode immune */
-	.sl-track-svg {
+	/* Gradient track — writing-mode: horizontal-tb forced to override inheritance */
+	.sl-track-visual {
 		position: absolute;
 		left: 50%;
 		top: 0;
-		width: 6px;
+		width: 8px;
 		height: 100%;
 		transform: translateX(-50%);
+		border-radius: 999px;
+		/* 0deg = upward (physical, not writing-mode relative) */
+		background: linear-gradient(0deg, #ff3b3b 0%, #ffb800 50%, #2bd4a7 100%);
 		pointer-events: none;
 		z-index: 0;
-		overflow: visible;
+		writing-mode: horizontal-tb;
 	}
 	/* Vertical range input */
 	.sl-range-v {
