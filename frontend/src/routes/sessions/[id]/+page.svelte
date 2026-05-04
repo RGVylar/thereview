@@ -4031,18 +4031,17 @@
 		min-height: 0;
 		width: 36px;
 	}
-	/* Gradient track (plain div, completely isolated from writing-mode) */
-	.sl-track-visual {
+	/* SVG gradient track — SVG coordinate system is writing-mode immune */
+	.sl-track-svg {
 		position: absolute;
 		left: 50%;
 		top: 0;
 		width: 6px;
 		height: 100%;
 		transform: translateX(-50%);
-		border-radius: 999px;
-		background: linear-gradient(to top, #ff3b3b 0%, #ffb800 50%, #2bd4a7 100%);
 		pointer-events: none;
 		z-index: 0;
+		overflow: visible;
 	}
 	/* Vertical range input */
 	.sl-range-v {
