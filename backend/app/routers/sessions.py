@@ -127,6 +127,7 @@ def create_session(
         status=SessionStatus.PENDING,
         meme_limit=body.meme_limit,
         mix_mode=mix_mode,
+        advance_mode=body.advance_mode or "vote",
     )
     db.add(session)
     db.flush()

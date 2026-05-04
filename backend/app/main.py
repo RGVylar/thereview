@@ -9,6 +9,17 @@ from app.routers import memes, sessions, users, votes, ws
 
 Base.metadata.create_all(bind=engine)
 
+# SQLite dev: add new columns to existing tables if missing
+from app.database import engine as _engine
+with _engine.connect() as _conn:
+    try:
+        _conn.execute(__import__('sqlalchemy').text(
+            "ALTER TABLE sessions ADD COLUMN advance_mode VARCHAR(20) NOT NULL DEFAULT 'vote'"
+        ))
+        _conn.commit()
+    except Exception:
+        pass  # column already exists
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):

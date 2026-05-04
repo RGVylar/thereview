@@ -90,6 +90,7 @@
 	// Managed by the localVideoSync Svelte action.
 	let localVideoEl = null;
 	let localVideoMuted = $state(false);
+	let localVideoLoop = $state(false);
 
 	/**
 	 * Svelte action for local <video> elements (served from our own backend).
@@ -884,7 +885,15 @@
 		const uid = authVal.user?.id;
 		const sm = currentMeme();
 		if (!sm) return;
-		// Meme submitter can skip alone
+		// Free mode: anyone can advance immediately
+		if (session.advance_mode === 'free') {
+			if (ws?.readyState === WebSocket.OPEN) {
+				ws.send(JSON.stringify({ type: 'next_vote' }));
+			}
+			next();
+			return;
+		}
+		// Vote mode: meme submitter can skip alone, otherwise everyone must click
 		const isOwner = sm.meme.user_id === uid;
 		if (!nextVoters.includes(uid)) {
 			nextVoters = [...nextVoters, uid];
@@ -1344,6 +1353,9 @@
 									</button>
 									<button class="btn-icon btn-glass hud-icon-btn" class:hud-muted={localVideoMuted} onclick={() => { if (localVideoEl) { localVideoEl.muted = !localVideoEl.muted; } }}>
 										{localVideoMuted ? '🔇' : '🔊'}
+									</button>
+									<button class="btn-icon btn-glass hud-icon-btn" class:loop-active={localVideoLoop} title={localVideoLoop ? 'Loop ON' : 'Loop OFF'} onclick={() => { localVideoLoop = !localVideoLoop; if (localVideoEl) localVideoEl.loop = localVideoLoop; }}>
+										🔁
 									</button>
 								</div>
 							{/if}
@@ -4500,6 +4512,7 @@
 		flex-shrink: 0;
 	}
 	.hud-muted { color: var(--coral) !important; }
+	.loop-active { color: var(--teal) !important; border-color: rgba(94,227,210,0.4) !important; }
 	.hud-fun-row {
 		display: flex;
 		gap: 0.25rem;

@@ -13,6 +13,7 @@
 	let selectedUserIds = $state([]);
 	let memeLimit = $state('');
 	let mixMode = $state('shuffle');
+	let advanceMode = $state('vote'); // "vote" | "free"
 	let error = $state('');
 	let loading = $state(false);
 
@@ -60,7 +61,8 @@
 					name: name.trim(),
 					user_ids: selectedUserIds,
 					meme_limit: memeLimit ? parseInt(memeLimit) : null,
-					mix_mode: mixMode
+					mix_mode: mixMode,
+					advance_mode: advanceMode
 				},
 				token: authVal.token
 			});
@@ -145,6 +147,13 @@
 					<div class="seg-group">
 						<button type="button" class="seg-btn" class:active={mixMode === 'shuffle'} onclick={() => (mixMode = 'shuffle')}>🔀 Mezclar</button>
 						<button type="button" class="seg-btn" class:active={mixMode === 'batched'} onclick={() => (mixMode = 'batched')}>📦 Por tandas</button>
+					</div>
+				</div>
+				<div class="field">
+					<span class="field-label">Avanzar meme</span>
+					<div class="seg-group">
+						<button type="button" class="seg-btn" class:active={advanceMode === 'vote'} onclick={() => (advanceMode = 'vote')}>🗳️ Todos votan next</button>
+						<button type="button" class="seg-btn" class:active={advanceMode === 'free'} onclick={() => (advanceMode = 'free')}>⚡ Cualquiera avanza</button>
 					</div>
 				</div>
 			</div>

@@ -85,6 +85,7 @@ class Session(Base):
     )
     meme_limit: Mapped[int | None] = mapped_column(Integer, nullable=True, default=None)
     mix_mode: Mapped[str] = mapped_column(String(20), nullable=False, default="shuffle")
+    advance_mode: Mapped[str] = mapped_column(String(20), nullable=False, server_default="vote", default="vote")
     # Highest meme index the session has reached — used to mark only viewed memes as reviewed
     current_position: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 

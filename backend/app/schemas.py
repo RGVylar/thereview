@@ -78,6 +78,7 @@ class SessionCreate(BaseModel):
     user_ids: list[int]
     meme_limit: int | None = None
     mix_mode: str = "shuffle"  # "shuffle" | "batched"
+    advance_mode: str = "vote"  # "vote" (todos deben votar next) | "free" (cualquiera avanza)
 
 
 class SessionMemeOut(BaseModel):
@@ -99,6 +100,7 @@ class SessionOut(BaseModel):
     started_at: datetime | None = None
     meme_limit: int | None = None
     mix_mode: str = "shuffle"
+    advance_mode: str = "vote"
     participants: list[UserOut]
     meme_count: int
 
@@ -114,6 +116,7 @@ class SessionDetail(BaseModel):
     started_at: datetime | None = None
     meme_limit: int | None = None
     mix_mode: str = "shuffle"
+    advance_mode: str = "vote"
     participants: list[UserOut]
     session_memes: list[SessionMemeOut]
 
