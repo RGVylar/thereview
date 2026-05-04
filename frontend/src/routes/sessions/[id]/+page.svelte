@@ -1303,6 +1303,8 @@
 							<div class="sl-track-area">
 								<span class="sl-emoji-label">🏆</span>
 								<div class="sl-track-wrap">
+									<!-- Gradient track (plain div, unaffected by writing-mode) -->
+									<div class="sl-track-visual"></div>
 									<input
 										type="range"
 										orient="vertical"
@@ -4020,9 +4022,8 @@
 		min-height: 0;
 		width: 36px;
 	}
-	/* Gradient track drawn with a pseudo-element (unaffected by writing-mode rotation) */
-	.sl-track-wrap::before {
-		content: '';
+	/* Gradient track (plain div, completely isolated from writing-mode) */
+	.sl-track-visual {
 		position: absolute;
 		left: 50%;
 		top: 0;
@@ -4030,7 +4031,7 @@
 		height: 100%;
 		transform: translateX(-50%);
 		border-radius: 999px;
-		background: linear-gradient(to top, #ff3b3b, #ffb800, #2bd4a7);
+		background: linear-gradient(to top, #ff3b3b 0%, #ffb800 50%, #2bd4a7 100%);
 		pointer-events: none;
 		z-index: 0;
 	}
