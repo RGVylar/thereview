@@ -33,6 +33,7 @@ def _session_to_out(session: Session, meme_count: int) -> SessionOut:
         started_at=session.started_at,
         meme_limit=session.meme_limit,
         mix_mode=session.mix_mode,
+        advance_mode=session.advance_mode,
         participants=[_user_from_session_user(p) for p in session.participants],
         meme_count=meme_count,
     )
@@ -228,6 +229,7 @@ def get_session(
         started_at=session.started_at,
         meme_limit=session.meme_limit,
         mix_mode=session.mix_mode,
+        advance_mode=session.advance_mode,
         participants=[_user_from_session_user(p) for p in session.participants],
         session_memes=sorted(session.session_memes, key=lambda sm: sm.position),
     )

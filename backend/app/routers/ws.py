@@ -218,6 +218,7 @@ async def session_ws(websocket: WebSocket, session_id: int, token: str = Query(.
                 await _broadcast(
                     session_id,
                     {"type": "next_vote", "user_id": user_id, "user": display_name},
+                    exclude_uid=user_id,  # don't echo back — sender already updated locally
                 )
 
             elif msg_type == "cursor":

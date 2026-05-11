@@ -885,11 +885,8 @@
 		const uid = authVal.user?.id;
 		const sm = currentMeme();
 		if (!sm) return;
-		// Free mode: anyone can advance immediately
+		// Free mode: anyone can advance immediately — next() sends navigate directly
 		if (session.advance_mode === 'free') {
-			if (ws?.readyState === WebSocket.OPEN) {
-				ws.send(JSON.stringify({ type: 'next_vote' }));
-			}
 			next();
 			return;
 		}
