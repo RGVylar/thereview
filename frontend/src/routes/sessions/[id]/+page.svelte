@@ -138,14 +138,14 @@
 		function sendPlayback(action) {
 			if (suppressed) return;
 			const uid = authVal?.user?.id;
+			const playing = !node.paused;
+			const currentTime = node.currentTime;
 			if (uid) {
-				playbackStates = { ...playbackStates, [uid]: { playing: !node.paused, currentTime: node.currentTime } };
+				playbackStates = { ...playbackStates, [uid]: { playing, currentTime } };
 			}
 			if (ws?.readyState === WebSocket.OPEN) {
-				ws.send(JSON.stringify({ type: 'playback', action, currentTime: node.currentTime }));
-			}
-			if (ws?.readyState === WebSocket.OPEN) {
-				ws.send(JSON.stringify({ type: 'playback_state', playing: !node.paused, currentTime: node.currentTime }));
+				ws.send(JSON.stringify({ type: 'playback', action, currentTime }));
+				ws.send(JSON.stringify({ type: 'playback_state', playing, currentTime }));
 			}
 		}
 
@@ -481,8 +481,10 @@
 	async function loadSession() {
 		try {
 			const id = pageVal.params.id;
-			session = await api(`/api/sessions/${id}`, { token: authVal.token });
-			votes = await api(`/api/sessions/${id}/votes`, { token: authVal.token });
+			[session, votes] = await Promise.all([
+				api(`/api/sessions/${id}`, { token: authVal.token }),
+				api(`/api/sessions/${id}/votes`, { token: authVal.token }),
+			]);
 			// Restore emoji reaction counts from localStorage (persisted across reloads)
 			_loadEmojiCounts(session.id);
 			if (session.status === 'finished') {
@@ -956,17 +958,25 @@
 	$effect(() => {
 		if (!session?.session_memes || !votes.length) return;
 		const total = session.session_memes.length;
-		session.session_memes.forEach(sm => {
+		const participantCount = session.participants.length;
+		// Group votes by meme_id once instead of filtering the full array per meme
+		const votesByMeme = new Map();
+		for (const v of votes) {
+			let arr = votesByMeme.get(v.meme_id);
+			if (!arr) { arr = []; votesByMeme.set(v.meme_id, arr); }
+			arr.push(v);
+		}
+		for (const sm of session.session_memes) {
 			const mid = sm.meme.id;
-			if (_superfavSent.has(mid)) return;
-			const mVotes = votes.filter(v => v.meme_id === mid);
-			if (mVotes.length < session.participants.length) return;
-			if (!mVotes.every(v => v.value === total)) return;
+			if (_superfavSent.has(mid)) continue;
+			const mVotes = votesByMeme.get(mid);
+			if (!mVotes || mVotes.length < participantCount) continue;
+			if (!mVotes.every(v => v.value === total)) continue;
 			_superfavSent = new Set([..._superfavSent, mid]);
 			if (ws?.readyState === WebSocket.OPEN) {
 				ws.send(JSON.stringify({ type: 'superfav', meme_id: mid }));
 			}
-		});
+		}
 	});
 
 	// ── Show ranking (shared with WS) ─────────────────────────────────────────

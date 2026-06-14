@@ -5,6 +5,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from fastapi.responses import FileResponse
+from sqlalchemy import func
 from sqlalchemy.orm import Session as DBSession, joinedload
 
 from app.auth import get_current_user
@@ -178,24 +179,46 @@ def list_superfavorites(
 
 # ── List ──────────────────────────────────────────────────────────────────────
 
+@router.get("/invite-count")
+def get_invite_count(
+    db: DBSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Lightweight endpoint: count pending sessions where the user is a participant but not the creator."""
+    count = (
+        db.query(func.count(Session.id))
+        .join(SessionUser, SessionUser.session_id == Session.id)
+        .filter(
+            SessionUser.user_id == current_user.id,
+            Session.status == SessionStatus.PENDING,
+            Session.created_by != current_user.id,
+        )
+        .scalar()
+    )
+    return {"count": count or 0}
+
+
 @router.get("", response_model=list[SessionOut])
 def list_sessions(
     db: DBSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    sessions = (
-        db.query(Session)
-        .join(SessionUser)
+    # Single query: sessions + participants + meme counts via subquery
+    meme_count_sub = (
+        db.query(SessionMeme.session_id, func.count(SessionMeme.id).label("cnt"))
+        .group_by(SessionMeme.session_id)
+        .subquery()
+    )
+    rows = (
+        db.query(Session, func.coalesce(meme_count_sub.c.cnt, 0))
+        .join(SessionUser, SessionUser.session_id == Session.id)
+        .outerjoin(meme_count_sub, meme_count_sub.c.session_id == Session.id)
         .filter(SessionUser.user_id == current_user.id)
         .options(joinedload(Session.participants).joinedload(SessionUser.user))
         .order_by(Session.created_at.desc())
         .all()
     )
-    result = []
-    for s in sessions:
-        meme_count = db.query(SessionMeme).filter(SessionMeme.session_id == s.id).count()
-        result.append(_session_to_out(s, meme_count))
-    return result
+    return [_session_to_out(s, cnt) for s, cnt in rows]
 
 
 # ── Get ───────────────────────────────────────────────────────────────────────

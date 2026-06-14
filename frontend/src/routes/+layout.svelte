@@ -99,10 +99,8 @@
 	async function refreshInviteCount() {
 		if (!authVal?.token) return;
 		try {
-			const sessions = await api('/api/sessions', { token: authVal.token });
-			pendingInvites = sessions.filter(
-				(s) => s.status === 'pending' && s.created_by !== authVal.user?.id
-			).length;
+			const { count } = await api('/api/sessions/invite-count', { token: authVal.token });
+			pendingInvites = count;
 		} catch { /* ignore */ }
 	}
 
